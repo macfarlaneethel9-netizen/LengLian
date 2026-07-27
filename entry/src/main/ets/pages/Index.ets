@@ -24,10 +24,11 @@
  *     │              ├─ 半透明遮罩（点击关闭侧边栏）
  *     │              └─ 侧边栏抽屉（从左侧滑入）
  *     │                    ├─ 用户信息
- *     │                    ├─ 设备管理
+ *     │                    ├─ 设备列表
+ *     │                    ├─ 仓库状态
  *     │                    │    ├─ 温度监控
  *     │                    │    ├─ 光照监控
- *     │                    │    └─ 货物管理
+ *     │                    │    └─ 湿度监控
  *     │                    ├─ 告警记录
  *     │                    └─ 仓库开关
  *
@@ -39,7 +40,8 @@
  */
 
 import { LoginPage } from './Login';
-import { DeviceManagePage } from './DeviceManage';
+import { DeviceListPage } from './DeviceList';
+import { WarehouseStatusPage } from './WarehouseStatus';
 import { AlarmLogPage } from './AlarmLog';
 import { WarehouseSwitchPage } from './WarehouseSwitch';
 
@@ -60,17 +62,18 @@ class SideMenu {
 @Component
 struct Index {
   // ====== 全局状态 ======
-  @State isLoggedIn: boolean = false;          // 是否已登录（控制显示哪个界面）
-  @State showSidebar: boolean = false;         // 侧边栏是否展开
-  @State currentPage: string = 'DeviceManage'; // 当前显示的功能页
-  @State currentLabel: string = '设备管理';     // 顶部标题
+  @State isLoggedIn: boolean = false;              // 是否已登录（控制显示哪个界面）
+  @State showSidebar: boolean = false;             // 侧边栏是否展开
+  @State currentPage: string = 'DeviceList';       // 当前显示的功能页
+  @State currentLabel: string = '设备列表';         // 顶部标题
 
-  // ====== 登录后的侧边栏菜单（第一个是"用户信息"，替代"用户登录"）======
+  // ====== 登录后的侧边栏菜单 ======
   private menusAfterLogin: SideMenu[] = [
-    new SideMenu('UserInfo',       '用户信息', '👤'),
-    new SideMenu('DeviceManage',   '设备管理', '🔧'),
-    new SideMenu('AlarmLog',       '告警记录', '🔔'),
-    new SideMenu('WarehouseSwitch','仓库开关', '🏭'),
+    new SideMenu('UserInfo',         '用户信息', '👤'),
+    new SideMenu('DeviceList',       '设备列表', '📋'),
+    new SideMenu('WarehouseStatus',  '仓库状态', '🏭'),
+    new SideMenu('AlarmLog',         '告警记录', '🔔'),
+    new SideMenu('WarehouseSwitch',  '仓库开关', '⚡'),
   ];
 
   aboutToAppear(): void {
@@ -80,8 +83,8 @@ struct Index {
   // ====== 登录成功回调（传给 LoginPage）======
   onLoginSuccess = (): void => {
     this.isLoggedIn = true;
-    this.currentPage = 'DeviceManage';
-    this.currentLabel = '设备管理';
+    this.currentPage = 'DeviceList';
+    this.currentLabel = '设备列表';
     console.info('[Index] 登录成功，进入主界面');
   };
 
@@ -140,8 +143,10 @@ struct Index {
           // ---- 内容切换区 ----
           if (this.currentPage === 'UserInfo') {
             this.UserInfoContent()
-          } else if (this.currentPage === 'DeviceManage') {
-            DeviceManagePage()
+          } else if (this.currentPage === 'DeviceList') {
+            DeviceListPage()
+          } else if (this.currentPage === 'WarehouseStatus') {
+            WarehouseStatusPage()
           } else if (this.currentPage === 'AlarmLog') {
             AlarmLogPage()
           } else if (this.currentPage === 'WarehouseSwitch') {

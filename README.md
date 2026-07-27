@@ -32,11 +32,14 @@ LengLian/
 │   │   └── pages/                      # 页面组件
 │   │       ├── Index.ets               # 主框架（路由 + 侧边栏）
 │   │       ├── Login.ets               # 登录 / 注册页面
-│   │       ├── DeviceManage.ets        # 设备管理（温度/光照/货物）
+│   │       ├── DeviceList.ets          # 设备列表页
+│   │       ├── WarehouseStatus.ets     # 仓库状态（温度/光照/湿度）
 │   │       ├── AlarmLog.ets            # 告警记录页面
 │   │       └── WarehouseSwitch.ets     # 仓库开关管理页面
-│   │   └── components/                 # 公共组件
-│   │       └── CommonBuilders.ets      # 通用 UI 构建器
+│   │   ├── components/                 # 公共组件
+│   │   │   └── CommonBuilders.ets      # 通用 UI 构建器
+│   │   └── services/                   # API 服务层
+│   │       └── ApiService.ets          # HTTP 请求封装
 │   └── src/main/resources/             # 模块资源（字符串、颜色、媒体等）
 │
 ├── build-profile.json5                 # 编译配置
