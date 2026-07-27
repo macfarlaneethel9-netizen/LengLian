@@ -10,46 +10,37 @@
  *   Tab 2：光照监控   — 各设备光照详情
  */
 
-import { PageTitle, PlaceholderText } from '../components/CommonBuilders';
+import { PageTitle } from '../components/CommonBuilders';
 import { apiService, DeviceInfo } from '../services/ApiService';
 
 @Component
 export struct DeviceManagePage {
-  // Tab 索引
   @State currentTabIndex: number = 0;
-
-  // 设备数据
   @State devices: DeviceInfo[] = [];
   @State isLoading: boolean = true;
   @State errorText: string = '';
   @State lastRefresh: string = '--:--:--';
 
-  // ====== 生命周期 ======
-
   aboutToAppear(): void {
     this.fetchDevices();
   }
 
-  // ====== 拉取设备列表 ======
-
   async fetchDevices(): Promise<void> {
     this.isLoading = true;
     this.errorText = '';
-
     try {
       let result = await apiService.getDevices(1, 50);
       this.devices = result.items;
-      // 更新时间戳
       let now = new Date();
-      this.lastRefresh = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+      this.lastRefresh =
+        `${now.getHours().toString().padStart(2, '0')}:` +
+        `${now.getMinutes().toString().padStart(2, '0')}:` +
+        `${now.getSeconds().toString().padStart(2, '0')}`;
     } catch (err) {
       this.errorText = '加载失败：' + String((err as Error).message || '未知错误');
-      console.error('[DeviceManage] 获取设备列表失败:', JSON.stringify(err));
     }
     this.isLoading = false;
   }
-
-  // ====== 温度告警等级 ======
 
   getTempLevel(temp: number): string {
     if (temp > 8) { return '高温告警'; }
@@ -63,8 +54,6 @@ export struct DeviceManagePage {
     return '#4CAF50';
   }
 
-  // ====== 光照等级 ======
-
   getLuxLevel(lux: number): string {
     if (lux > 200) { return '过亮'; }
     if (lux < 50)  { return '偏暗'; }
@@ -75,6 +64,16 @@ export struct DeviceManagePage {
     if (lux > 200) { return '#FF9800'; }
     if (lux < 50)  { return '#9E9E9E'; }
     return '#4CAF50';
+  }
+
+  formatTime(ts: number): string {
+    if (!ts || ts <= 0) { return '--:--:--'; }
+    let date = new Date(ts * 1000);
+    return (
+      `${date.getHours().toString().padStart(2, '0')}:` +
+      `${date.getMinutes().toString().padStart(2, '0')}:` +
+      `${date.getSeconds().toString().padStart(2, '0')}`
+    );
   }
 
   build() {
@@ -89,17 +88,16 @@ export struct DeviceManagePage {
             .onClick(() => {
               if (!this.isLoading) { this.fetchDevices(); }
             })
-            .rotate({ angle: this.isLoading ? 360 : 0 })
-            .animation({ duration: 800, curve: Curve.Linear, iterations: this.isLoading ? -1 : 1 })
           Text(`${this.devices.length} 个设备`)
             .fontSize(12)
             .fontColor('#999')
+            .margin({ left: 6 })
         }
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
 
-      // ---- 加载/错误提示 ----
+      // ---- 加载状态 ----
       if (this.isLoading) {
         Text('加载中...')
           .fontSize(14)
@@ -107,6 +105,7 @@ export struct DeviceManagePage {
           .margin({ top: 40 })
       }
 
+      // ---- 错误提示 ----
       if (this.errorText !== '') {
         Text(this.errorText)
           .fontSize(13)
@@ -117,6 +116,7 @@ export struct DeviceManagePage {
           .width('100%')
       }
 
+      // ---- 空数据 ----
       if (this.devices.length === 0 && !this.isLoading && this.errorText === '') {
         Text('暂无设备，请先添加设备')
           .fontSize(14)
@@ -132,7 +132,7 @@ export struct DeviceManagePage {
             List({ space: 12 }) {
               ForEach(this.devices, (device: DeviceInfo) => {
                 ListItem() {
-                  this.DeviceCard(device)
+                  this.DeviceOverviewCard(device)
                 }
               })
             }
@@ -142,7 +142,7 @@ export struct DeviceManagePage {
             .padding({ top: 8, bottom: 16 })
           }
         }
-        .tabBar(this.TabBarBuilder('设备列表', 0))
+        .tabBar(this.TabBarLabel('设备列表', 0))
 
         // ====== Tab 1：温度监控 ======
         TabContent() {
@@ -150,7 +150,7 @@ export struct DeviceManagePage {
             List({ space: 12 }) {
               ForEach(this.devices, (device: DeviceInfo) => {
                 ListItem() {
-                  this.TempCard(device)
+                  this.TemperatureCard(device)
                 }
               })
             }
@@ -160,7 +160,7 @@ export struct DeviceManagePage {
             .padding({ top: 8, bottom: 16 })
           }
         }
-        .tabBar(this.TabBarBuilder('温度监控', 1))
+        .tabBar(this.TabBarLabel('温度监控', 1))
 
         // ====== Tab 2：光照监控 ======
         TabContent() {
@@ -168,7 +168,7 @@ export struct DeviceManagePage {
             List({ space: 12 }) {
               ForEach(this.devices, (device: DeviceInfo) => {
                 ListItem() {
-                  this.LuxCard(device)
+                  this.LightCard(device)
                 }
               })
             }
@@ -178,7 +178,7 @@ export struct DeviceManagePage {
             .padding({ top: 8, bottom: 16 })
           }
         }
-        .tabBar(this.TabBarBuilder('光照监控', 2))
+        .tabBar(this.TabBarLabel('光照监控', 2))
       }
       .width('100%')
       .layoutWeight(1)
@@ -198,7 +198,7 @@ export struct DeviceManagePage {
   // @Builder：Tab 标签
   // ============================================================
   @Builder
-  TabBarBuilder(label: string, index: number) {
+  TabBarLabel(label: string, index: number) {
     Column() {
       Text(label)
         .fontSize(14)
@@ -217,9 +217,9 @@ export struct DeviceManagePage {
   // @Builder：设备概览卡片
   // ============================================================
   @Builder
-  DeviceCard(device: DeviceInfo) {
+  DeviceOverviewCard(device: DeviceInfo) {
     Column({ space: 8 }) {
-      // 顶部：设备名称 + 在线状态
+      // 顶部：名称 + 在线
       Row() {
         Text(device.name || device.device_id)
           .fontSize(16)
@@ -241,28 +241,21 @@ export struct DeviceManagePage {
 
       Divider().color('#F0F0F0')
 
-      // 遥测数据
-      let t = device.last_telemetry;
+      // 四列遥测
       Row() {
-        // 温度
         Column() {
-          Text('温度')
-            .fontSize(11)
-            .fontColor('#999')
-          Text(`${t.temp.toFixed(1)}℃`)
+          Text('温度').fontSize(11).fontColor('#999')
+          Text(`${device.last_telemetry.temp.toFixed(1)}℃`)
             .fontSize(20)
-            .fontColor(this.getTempColor(t.temp))
+            .fontColor(this.getTempColor(device.last_telemetry.temp))
             .fontWeight(FontWeight.Bold)
             .margin({ top: 2 })
         }
         .layoutWeight(1)
 
-        // 湿度
         Column() {
-          Text('湿度')
-            .fontSize(11)
-            .fontColor('#999')
-          Text(`${t.humi.toFixed(1)}%`)
+          Text('湿度').fontSize(11).fontColor('#999')
+          Text(`${device.last_telemetry.humi.toFixed(1)}%`)
             .fontSize(20)
             .fontColor('#2196F3')
             .fontWeight(FontWeight.Bold)
@@ -270,25 +263,19 @@ export struct DeviceManagePage {
         }
         .layoutWeight(1)
 
-        // 光照
         Column() {
-          Text('光照')
-            .fontSize(11)
-            .fontColor('#999')
-          Text(`${t.lux.toFixed(0)} lux`)
+          Text('光照').fontSize(11).fontColor('#999')
+          Text(`${device.last_telemetry.lux.toFixed(0)} lux`)
             .fontSize(20)
-            .fontColor(this.getLuxColor(t.lux))
+            .fontColor(this.getLuxColor(device.last_telemetry.lux))
             .fontWeight(FontWeight.Bold)
             .margin({ top: 2 })
         }
         .layoutWeight(1)
 
-        // 告警
         Column() {
-          Text('告警')
-            .fontSize(11)
-            .fontColor('#999')
-          Text(t.alarm === 1 ? '⚠️' : '✅')
+          Text('告警').fontSize(11).fontColor('#999')
+          Text(device.last_telemetry.alarm === 1 ? '⚠️' : '✅')
             .fontSize(20)
             .margin({ top: 2 })
         }
@@ -297,8 +284,8 @@ export struct DeviceManagePage {
       .width('100%')
 
       // 告警原因
-      if (t.alarm === 1 && t.alarm_reason) {
-        Text(`告警原因: ${t.alarm_reason}`)
+      if (device.last_telemetry.alarm === 1 && device.last_telemetry.alarm_reason) {
+        Text(`告警: ${device.last_telemetry.alarm_reason}`)
           .fontSize(11)
           .fontColor('#F44336')
           .width('100%')
@@ -322,8 +309,7 @@ export struct DeviceManagePage {
   // @Builder：温度监控卡片
   // ============================================================
   @Builder
-  TempCard(device: DeviceInfo) {
-    let t = device.last_telemetry;
+  TemperatureCard(device: DeviceInfo) {
     Column({ space: 10 }) {
       Row() {
         Text(device.name || device.device_id)
@@ -340,29 +326,22 @@ export struct DeviceManagePage {
       }
       .width('100%')
 
-      // 温度大数字
+      // 温度大数字 + 状态
       Row() {
         Column() {
-          Text('当前温度')
-            .fontSize(12)
-            .fontColor('#999')
-          Text(`${t.temp.toFixed(1)} ℃`)
+          Text('当前温度').fontSize(12).fontColor('#999')
+          Text(`${device.last_telemetry.temp.toFixed(1)} ℃`)
             .fontSize(36)
-            .fontColor(this.getTempColor(t.temp))
+            .fontColor(this.getTempColor(device.last_telemetry.temp))
             .fontWeight(FontWeight.Bold)
             .margin({ top: 4 })
         }
-
         Blank()
-
-        // 告警状态
         Column() {
-          Text('温度状态')
-            .fontSize(12)
-            .fontColor('#999')
-          Text(this.getTempLevel(t.temp))
+          Text('温度状态').fontSize(12).fontColor('#999')
+          Text(this.getTempLevel(device.last_telemetry.temp))
             .fontSize(14)
-            .fontColor(this.getTempColor(t.temp))
+            .fontColor(this.getTempColor(device.last_telemetry.temp))
             .fontWeight(FontWeight.Bold)
             .margin({ top: 4 })
         }
@@ -370,31 +349,24 @@ export struct DeviceManagePage {
       }
       .width('100%')
 
-      // 温控范围参考线
+      // 参考线
       Row() {
-        Text('0℃')
-          .fontSize(10)
-          .fontColor('#999')
-        // 温度指示条
-        Column() {
-        }
+        Text('0℃').fontSize(10).fontColor('#999')
+        Column() {}
         .layoutWeight(1)
         .height(6)
         .backgroundColor('#E0E0E0')
         .borderRadius(3)
         .margin({ left: 8, right: 8 })
-        Text('12℃')
-          .fontSize(10)
-          .fontColor('#999')
+        Text('12℃').fontSize(10).fontColor('#999')
       }
       .width('100%')
 
-      // 告警原因
-      if (t.alarm === 1 && t.alarm_reason) {
+      // 告警条
+      if (device.last_telemetry.alarm === 1 && device.last_telemetry.alarm_reason) {
         Row() {
-          Text('⚠️')
-            .fontSize(14)
-          Text(t.alarm_reason)
+          Text('⚠️').fontSize(14)
+          Text(device.last_telemetry.alarm_reason)
             .fontSize(13)
             .fontColor('#F44336')
             .margin({ left: 4 })
@@ -422,8 +394,7 @@ export struct DeviceManagePage {
   // @Builder：光照监控卡片
   // ============================================================
   @Builder
-  LuxCard(device: DeviceInfo) {
-    let t = device.last_telemetry;
+  LightCard(device: DeviceInfo) {
     Column({ space: 10 }) {
       Row() {
         Text(device.name || device.device_id)
@@ -440,28 +411,22 @@ export struct DeviceManagePage {
       }
       .width('100%')
 
-      // 光照大数字
+      // 光照大数字 + 状态
       Row() {
         Column() {
-          Text('当前光照')
-            .fontSize(12)
-            .fontColor('#999')
-          Text(`${t.lux.toFixed(0)} lux`)
+          Text('当前光照').fontSize(12).fontColor('#999')
+          Text(`${device.last_telemetry.lux.toFixed(0)} lux`)
             .fontSize(36)
-            .fontColor(this.getLuxColor(t.lux))
+            .fontColor(this.getLuxColor(device.last_telemetry.lux))
             .fontWeight(FontWeight.Bold)
             .margin({ top: 4 })
         }
-
         Blank()
-
         Column() {
-          Text('光照状态')
-            .fontSize(12)
-            .fontColor('#999')
-          Text(this.getLuxLevel(t.lux))
+          Text('光照状态').fontSize(12).fontColor('#999')
+          Text(this.getLuxLevel(device.last_telemetry.lux))
             .fontSize(14)
-            .fontColor(this.getLuxColor(t.lux))
+            .fontColor(this.getLuxColor(device.last_telemetry.lux))
             .fontWeight(FontWeight.Bold)
             .margin({ top: 4 })
         }
@@ -469,30 +434,23 @@ export struct DeviceManagePage {
       }
       .width('100%')
 
-      // 光照指示条
+      // 参考线
       Row() {
-        Text('暗')
-          .fontSize(10)
-          .fontColor('#999')
-        Column() {
-        }
+        Text('暗').fontSize(10).fontColor('#999')
+        Column() {}
         .layoutWeight(1)
         .height(6)
         .backgroundColor('#E0E0E0')
         .borderRadius(3)
         .margin({ left: 8, right: 8 })
-        Text('亮')
-          .fontSize(10)
-          .fontColor('#999')
+        Text('亮').fontSize(10).fontColor('#999')
       }
       .width('100%')
 
       // 湿度
       Row() {
-        Text('附带湿度')
-          .fontSize(12)
-          .fontColor('#999')
-        Text(`${t.humi.toFixed(1)}%`)
+        Text('附带湿度').fontSize(12).fontColor('#999')
+        Text(`${device.last_telemetry.humi.toFixed(1)}%`)
           .fontSize(14)
           .fontColor('#2196F3')
           .fontWeight(FontWeight.Bold)
@@ -501,13 +459,11 @@ export struct DeviceManagePage {
 
       // 倾斜量
       Row() {
-        Text('倾斜量')
-          .fontSize(12)
-          .fontColor('#999')
-        Text(`${t.tilt.toFixed(0)}`)
+        Text('倾斜量').fontSize(12).fontColor('#999')
+        Text(`${device.last_telemetry.tilt.toFixed(0)}`)
           .fontSize(14)
           .fontWeight(FontWeight.Bold)
-          .fontColor(t.tilt > 15000 ? '#F44336' : '#333')
+          .fontColor(device.last_telemetry.tilt > 15000 ? '#F44336' : '#333')
           .margin({ left: 8 })
       }
 
@@ -522,14 +478,5 @@ export struct DeviceManagePage {
     .backgroundColor('#FFFFFF')
     .borderRadius(12)
     .shadow({ radius: 4, color: '#00000008', offsetY: 2 })
-  }
-
-  // ============================================================
-  // 工具：格式化时间戳为 HH:MM:SS
-  // ============================================================
-  formatTime(ts: number): string {
-    if (!ts || ts <= 0) { return '--:--:--'; }
-    let date = new Date(ts * 1000);
-    return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}`;
   }
 }

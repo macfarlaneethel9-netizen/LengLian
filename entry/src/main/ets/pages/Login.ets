@@ -239,7 +239,7 @@ export struct LoginPage {
       if (this.onLoginSuccess) {
         this.onLoginSuccess();
       }
-    } catch (err: Object) {
+    } catch (err) {
       let msg = String((err as Error).message || '');
       // 后端返回 401 时尝试从响应中提取 detail
       if (msg.includes('401') || msg.includes('Invalid')) {
@@ -282,7 +282,7 @@ export struct LoginPage {
       this.regPassword = '';
       this.regConfirm = '';
       this.isLoginMode = true;
-    } catch (err: Object) {
+    } catch (err) {
       let msg = String((err as Error).message || '');
       if (msg.includes('409') || msg.includes('already')) {
         this.errorMsg = '该账号已被注册';

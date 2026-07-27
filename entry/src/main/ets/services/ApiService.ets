@@ -28,25 +28,25 @@ export interface LoginResult {
 
 export interface TelemetryData {
   ts: number;
-  temp: number;        // 温度 ℃
-  humi: number;        // 湿度 %
-  lux: number;         // 光照 lux
-  tilt: number;        // 倾斜量
-  motor: number;       // 电机 0=关 1=开
-  alarm: number;       // 告警 0=正常 1=告警
-  alarm_reason: string; // 告警原因
-  scene: string;       // 场景
-  _ts: number;         // 服务端时间戳
+  temp: number;
+  humi: number;
+  lux: number;
+  tilt: number;
+  motor: number;
+  alarm: number;
+  alarm_reason: string;
+  scene: string;
+  _ts: number;
 }
 
 export interface DeviceInfo {
-  device_id: string;            // 设备唯一 ID
-  online: boolean;              // 是否在线
-  fw: string;                  // 固件版本
-  last_seen: number;           // 最后上报时间
-  last_telemetry: TelemetryData; // 最新遥测
-  name: string;                // 设备名称
-  location: string;            // 设备位置
+  device_id: string;
+  online: boolean;
+  fw: string;
+  last_seen: number;
+  last_telemetry: TelemetryData;
+  name: string;
+  location: string;
   user_id: number;
   created_at: number;
   updated_at: number;
@@ -80,6 +80,34 @@ export interface EventListResult {
 }
 
 // ============================================================
+// 请求体类（ArkTS 要求 object 字面量必须对应显式声明的 class）
+// ============================================================
+
+class LoginBody {
+  username: string;
+  password: string;
+
+  constructor(username: string, password: string) {
+    this.username = username;
+    this.password = password;
+  }
+}
+
+class RegisterBody {
+  username: string;
+  password: string;
+  nickname?: string;
+
+  constructor(username: string, password: string, nickname?: string) {
+    this.username = username;
+    this.password = password;
+    if (nickname) {
+      this.nickname = nickname;
+    }
+  }
+}
+
+// ============================================================
 // ApiService 单例
 // ============================================================
 
@@ -90,20 +118,28 @@ class ApiService {
   currentUser: UserInfo | null = null;
 
   // ----------------------------------------------------------
+  // 构建 headers
+  // ----------------------------------------------------------
+  private buildHeaders(): Record<string, string> {
+    let h: Record<string, string> = {
+      'Content-Type': 'application/json'
+    };
+    if (this.token) {
+      h['Authorization'] = `Bearer ${this.token}`;
+    }
+    return h;
+  }
+
+  // ----------------------------------------------------------
   // 底层 HTTP 请求
   // ----------------------------------------------------------
   private async request(
     method: http.RequestMethod,
     path: string,
-    body?: object
+    body?: Object
   ): Promise<string> {
     let httpRequest = http.createHttp();
-    let headers: object = {
-      'Content-Type': 'application/json'
-    };
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
-    }
+    let headers = this.buildHeaders();
 
     try {
       let resp = await httpRequest.request(BASE_URL + path, {
@@ -128,10 +164,8 @@ class ApiService {
   // ----------------------------------------------------------
 
   async login(username: string, password: string): Promise<LoginResult> {
-    let data = await this.request(http.RequestMethod.POST, '/auth/login', {
-      username: username,
-      password: password
-    });
+    let body = new LoginBody(username, password);
+    let data = await this.request(http.RequestMethod.POST, '/auth/login', body);
     let result = JSON.parse(data) as LoginResult;
     this.token = result.token;
     this.currentUser = result.user;
@@ -144,13 +178,7 @@ class ApiService {
     password: string,
     nickname?: string
   ): Promise<LoginResult> {
-    let body: object = {
-      username: username,
-      password: password
-    };
-    if (nickname) {
-      body['nickname'] = nickname;
-    }
+    let body = new RegisterBody(username, password, nickname);
     let data = await this.request(http.RequestMethod.POST, '/auth/register', body);
     let result = JSON.parse(data) as LoginResult;
     this.token = result.token;
@@ -217,7 +245,7 @@ class ApiService {
 
   async sendCommand(
     deviceId: string,
-    cmd: object
+    cmd: Object
   ): Promise<object> {
     let data = await this.request(
       http.RequestMethod.POST,
