@@ -1,11 +1,5 @@
 {
   "src": [
-    "pages/Index",
-    "pages/Login",
-    "pages/Dashboard",
-    "pages/OrderList",
-    "pages/DeviceManage",
-    "pages/AlarmLog",
-    "pages/MapTrack"
+    "pages/Index"
   ]
 }

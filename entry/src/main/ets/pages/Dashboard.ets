@@ -1,39 +1,36 @@
 /**
  * 温度监控仪表盘
  *
- * 目标功能：
- *   - 实时温度数值展示
- *   - 温度曲线 / 进度条
- *   - 高温/低温告警色
- *   - 刷新间隔显示
+ * @Component 子组件，由 Index 根据 currentPage 状态切换显示。
+ * 运行链条：
+ *   Index.currentPage = 'Dashboard'
+ *     → Index.build() 重新执行
+ *     → if 分支命中 → DashboardPage() 渲染
  */
-@Entry
+
 @Component
-struct Dashboard {
-  @State currentTemp: number = 25.5;      // 当前温度
-  @State targetTemp: number = 4.0;        // 目标温度（冷链设定）
-  @State isAlarming: boolean = false;     // 是否告警
-  @State updateTime: string = '--:--:--'; // 最后更新时间
+export struct DashboardPage {
+  @State currentTemp: number = 25.5;
+  @State targetTemp: number = 4.0;
+  @State isAlarming: boolean = false;
+  @State updateTime: string = '--:--:--';
 
   build() {
     Column() {
       Text('温度监控仪表盘')
         .fontSize(28)
         .fontWeight(FontWeight.Bold)
-        .margin({ top: 60, bottom: 20 })
+        .margin({ top: 20, bottom: 20 })
 
-      // 仪表盘卡片区域（后续课程逐块实现）
       Column() {
         Text('温度数值卡片 — 后续课程添加')
           .fontSize(14)
           .fontColor('#999')
           .margin({ top: 12 })
-
         Text('温度曲线/进度 — 后续课程添加')
           .fontSize(14)
           .fontColor('#999')
           .margin({ top: 12 })
-
         Text('告警指示器 — 后续课程添加')
           .fontSize(14)
           .fontColor('#999')
