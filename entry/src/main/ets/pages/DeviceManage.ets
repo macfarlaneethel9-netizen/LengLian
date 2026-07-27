@@ -11,7 +11,7 @@
  *     → Tabs 默认显示温度监控 Tab
  */
 
-import { PageTitle, PlaceholderText, ContentCard } from '../components/CommonBuilders';
+import { PageTitle, PlaceholderText } from '../components/CommonBuilders';
 
 @Component
 export struct DeviceManagePage {
@@ -88,20 +88,35 @@ struct TempTab {
 
   build() {
     Column({ space: 16 }) {
-      ContentCard(() => {
+      // 温度数值卡片
+      Column() {
         PlaceholderText('温度数值卡片 — 后续课程添加')
         PlaceholderText(`当前温度: ${this.currentTemp}°C / 目标: ${this.targetTemp}°C`)
         PlaceholderText(`告警状态: ${this.isAlarming ? '告警中' : '正常'}`)
         PlaceholderText(`更新时间: ${this.updateTime}`)
-      })
+      }
+      .width('100%')
+      .padding(24)
+      .backgroundColor('#FFFFFF')
+      .borderRadius(12)
 
-      ContentCard(() => {
+      // 温度曲线
+      Column() {
         PlaceholderText('温度曲线/进度 — 后续课程添加')
-      })
+      }
+      .width('100%')
+      .padding(24)
+      .backgroundColor('#FFFFFF')
+      .borderRadius(12)
 
-      ContentCard(() => {
+      // 告警指示器
+      Column() {
         PlaceholderText('告警指示器 — 后续课程添加')
-      })
+      }
+      .width('100%')
+      .padding(24)
+      .backgroundColor('#FFFFFF')
+      .borderRadius(12)
     }
     .width('100%')
     .layoutWeight(1)
@@ -121,20 +136,35 @@ struct LightTab {
 
   build() {
     Column({ space: 16 }) {
-      ContentCard(() => {
+      // 光照数值卡片
+      Column() {
         PlaceholderText('光照数值卡片 — 后续课程添加')
         PlaceholderText(`当前光照: ${this.currentLux} lux / 阈值: ${this.threshold} lux`)
         PlaceholderText(`补光灯: ${this.isLightOn ? '开启' : '关闭'}`)
         PlaceholderText(`更新时间: ${this.updateTime}`)
-      })
+      }
+      .width('100%')
+      .padding(24)
+      .backgroundColor('#FFFFFF')
+      .borderRadius(12)
 
-      ContentCard(() => {
+      // 光照曲线
+      Column() {
         PlaceholderText('光照曲线/进度 — 后续课程添加')
-      })
+      }
+      .width('100%')
+      .padding(24)
+      .backgroundColor('#FFFFFF')
+      .borderRadius(12)
 
-      ContentCard(() => {
+      // 补光灯控制
+      Column() {
         PlaceholderText('补光灯控制 — 后续课程添加')
-      })
+      }
+      .width('100%')
+      .padding(24)
+      .backgroundColor('#FFFFFF')
+      .borderRadius(12)
     }
     .width('100%')
     .layoutWeight(1)
@@ -153,14 +183,24 @@ struct GoodsTab {
 
   build() {
     Column({ space: 16 }) {
-      ContentCard(() => {
+      // 货物概览统计
+      Column() {
         PlaceholderText('货物概览统计 — 后续课程添加')
         PlaceholderText(`总数: ${this.goodsCount} / 在库: ${this.inStockCount} / 出库: ${this.outboundCount}`)
-      })
+      }
+      .width('100%')
+      .padding(24)
+      .backgroundColor('#FFFFFF')
+      .borderRadius(12)
 
-      ContentCard(() => {
+      // 货物卡片列表
+      Column() {
         PlaceholderText('货物卡片列表 — 后续课程添加')
-      })
+      }
+      .width('100%')
+      .padding(24)
+      .backgroundColor('#FFFFFF')
+      .borderRadius(12)
     }
     .width('100%')
     .layoutWeight(1)

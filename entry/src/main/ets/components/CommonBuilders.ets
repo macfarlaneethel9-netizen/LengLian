@@ -1,7 +1,7 @@
 /**
  * 通用 UI 构建器
  *
- * 供各页面复用的 @Builder，减少重复样式代码。
+ * 供各页面复用的 @Builder 与 @Component，减少重复样式代码。
  */
 
 /**
@@ -27,17 +27,3 @@ export function PlaceholderText(text: string) {
     .margin({ top: 12 })
 }
 
-/**
- * 内容卡片容器
- */
-@Builder
-export function ContentCard(content: () => void) {
-  Column() {
-    content()
-  }
-  .width('100%')
-  .padding(24)
-  .backgroundColor('#FFFFFF')
-  .borderRadius(12)
-  .shadow({ radius: 4, color: '#00000008', offsetY: 2 })
-}
