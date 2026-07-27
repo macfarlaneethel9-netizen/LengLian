@@ -44,6 +44,7 @@ import { DeviceListPage } from './DeviceList';
 import { WarehouseStatusPage } from './WarehouseStatus';
 import { AlarmLogPage } from './AlarmLog';
 import { WarehouseSwitchPage } from './WarehouseSwitch';
+import { apiService } from '../services/ApiService';
 
 // ---------- 侧边栏菜单项 ----------
 class SideMenu {
@@ -72,7 +73,7 @@ struct Index {
     new SideMenu('UserInfo',         '用户信息', '👤'),
     new SideMenu('DeviceList',       '设备列表', '📋'),
     new SideMenu('WarehouseStatus',  '仓库状态', '🏭'),
-    new SideMenu('AlarmLog',         '告警记录', '🔔'),
+    new SideMenu('AlarmLog',         '事件日志', '🔔'),
     new SideMenu('WarehouseSwitch',  '仓库开关', '⚡'),
   ];
 
@@ -261,25 +262,58 @@ struct Index {
         .fontWeight(FontWeight.Bold)
         .margin({ top: 20, bottom: 20 })
 
-      Column() {
-        Text('用户名：李明 — 后续课程完善')
-          .fontSize(14)
-          .fontColor('#999')
-          .margin({ top: 12 })
-        Text('角色：管理员 — 后续课程完善')
-          .fontSize(14)
-          .fontColor('#999')
-          .margin({ top: 12 })
-        Text('账号设置 — 后续课程添加')
-          .fontSize(14)
-          .fontColor('#999')
-          .margin({ top: 12 })
+      Column({ space: 16 }) {
+        // 头像
+        Text('👤')
+          .fontSize(56)
+          .width(80)
+          .height(80)
+          .textAlign(TextAlign.Center)
+          .borderRadius(40)
+          .backgroundColor('#E3F2FD')
+
+        Text(apiService.currentUser?.nickname || apiService.currentUser?.username || '--')
+          .fontSize(22)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#333')
+
+        Divider().width('60%').color('#E0E0E0')
+
+        Row() {
+          Text('用户名').fontSize(14).fontColor('#999').width(80)
+          Text(apiService.currentUser?.username || '--')
+            .fontSize(14).fontColor('#333')
+        }
+
+        Row() {
+          Text('角色').fontSize(14).fontColor('#999').width(80)
+          Text(apiService.currentUser?.role === 'admin' ? '管理员' : '普通用户')
+            .fontSize(14).fontColor('#333')
+        }
+
+        Row() {
+          Text('用户 ID').fontSize(14).fontColor('#999').width(80)
+          Text(`${apiService.currentUser?.id || '--'}`)
+            .fontSize(14).fontColor('#333')
+        }
+
+        if (apiService.currentUser?.created_at) {
+          Row() {
+            Text('注册时间').fontSize(14).fontColor('#999').width(80)
+            Text(new Date(apiService.currentUser!.created_at! * 1000).toLocaleDateString())
+              .fontSize(14).fontColor('#333')
+          }
+        }
       }
       .width('100%')
       .padding(24)
+      .backgroundColor('#FFFFFF')
+      .borderRadius(12)
+      .shadow({ radius: 4, color: '#00000008', offsetY: 2 })
     }
     .width('100%')
     .height('100%')
     .backgroundColor('#F5F5F5')
+    .padding(16)
   }
 }
