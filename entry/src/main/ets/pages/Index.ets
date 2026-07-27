@@ -23,12 +23,13 @@
  *     │         └─ showSidebar == true
  *     │              ├─ 半透明遮罩（点击关闭侧边栏）
  *     │              └─ 侧边栏抽屉（从左侧滑入）
- *     │                    ├─ 用户信息（替换"用户登录"）
- *     │                    ├─ 温度监控
- *     │                    ├─ 订单列表
+ *     │                    ├─ 用户信息
  *     │                    ├─ 设备管理
+ *     │                    │    ├─ 温度监控
+ *     │                    │    ├─ 光照监控
+ *     │                    │    └─ 货物管理
  *     │                    ├─ 告警记录
- *     │                    └─ 地图轨迹
+ *     │                    └─ 仓库开关
  *
  * ============================================================
  * 交互流程：
@@ -38,9 +39,7 @@
  */
 
 import { LoginPage } from './Login';
-import { DashboardPage } from './Dashboard';
-import { LightMonitorPage } from './LightMonitor';
-import { GoodsManagePage } from './GoodsManage';
+import { DeviceManagePage } from './DeviceManage';
 import { AlarmLogPage } from './AlarmLog';
 import { WarehouseSwitchPage } from './WarehouseSwitch';
 
@@ -61,17 +60,15 @@ class SideMenu {
 @Component
 struct Index {
   // ====== 全局状态 ======
-  @State isLoggedIn: boolean = false;       // 是否已登录（控制显示哪个界面）
-  @State showSidebar: boolean = false;      // 侧边栏是否展开
-  @State currentPage: string = 'Dashboard'; // 当前显示的功能页
-  @State currentLabel: string = '温度监控';  // 顶部标题
+  @State isLoggedIn: boolean = false;          // 是否已登录（控制显示哪个界面）
+  @State showSidebar: boolean = false;         // 侧边栏是否展开
+  @State currentPage: string = 'DeviceManage'; // 当前显示的功能页
+  @State currentLabel: string = '设备管理';     // 顶部标题
 
   // ====== 登录后的侧边栏菜单（第一个是"用户信息"，替代"用户登录"）======
   private menusAfterLogin: SideMenu[] = [
     new SideMenu('UserInfo',       '用户信息', '👤'),
-    new SideMenu('Dashboard',      '温度监控', '🌡️'),
-    new SideMenu('LightMonitor',   '光照监控', '💡'),
-    new SideMenu('GoodsManage',    '货物管理', '📦'),
+    new SideMenu('DeviceManage',   '设备管理', '🔧'),
     new SideMenu('AlarmLog',       '告警记录', '🔔'),
     new SideMenu('WarehouseSwitch','仓库开关', '🏭'),
   ];
@@ -83,8 +80,8 @@ struct Index {
   // ====== 登录成功回调（传给 LoginPage）======
   onLoginSuccess = (): void => {
     this.isLoggedIn = true;
-    this.currentPage = 'Dashboard';
-    this.currentLabel = '温度监控';
+    this.currentPage = 'DeviceManage';
+    this.currentLabel = '设备管理';
     console.info('[Index] 登录成功，进入主界面');
   };
 
@@ -143,12 +140,8 @@ struct Index {
           // ---- 内容切换区 ----
           if (this.currentPage === 'UserInfo') {
             this.UserInfoContent()
-          } else if (this.currentPage === 'Dashboard') {
-            DashboardPage()
-          } else if (this.currentPage === 'LightMonitor') {
-            LightMonitorPage()
-          } else if (this.currentPage === 'GoodsManage') {
-            GoodsManagePage()
+          } else if (this.currentPage === 'DeviceManage') {
+            DeviceManagePage()
           } else if (this.currentPage === 'AlarmLog') {
             AlarmLogPage()
           } else if (this.currentPage === 'WarehouseSwitch') {
