@@ -1,12 +1,46 @@
+# Dependencies
 /node_modules
 /oh_modules
-/local.properties
-/.idea
+
+# Build outputs
 **/build
+**/.test
+
+# IDE / Editor
+/.idea
+/.vscode
+*.iml
+*.ipr
+*.iws
+
+# Local configuration
+/local.properties
+
+# hvigor
 /.hvigor
+/hvigor/out
+
+# Native / C++
 .cxx
 /.clangd
 /.clang-format
 /.clang-tidy
-**/.test
+
+# HarmonyOS / OpenHarmony specific
 /.appanalyzer
+/entry/.preview
+/entry/build-default-*.json
+*.har
+*.hap
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temporary files
+*.tmp
+*.temp
