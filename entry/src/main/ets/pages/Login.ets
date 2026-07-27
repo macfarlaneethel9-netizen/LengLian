@@ -1,46 +1,10 @@
 /**
  * 用户登录页面
  *
- * ============================================================
- * 运行链条（完整版）：
- * ============================================================
- *
- *   App 启动 → isLoggedIn == false → 全屏渲染 LoginPage
- *
- *   【登录模式】
- *   用户输入账号 → TextInput.onChange → this.account = value
- *   用户输入密码 → TextInput.onChange → this.password = value
- *   用户点"登录" → onClick
- *     → 校验：账号/密码不能为空
- *     → 查询本地存储中是否有匹配的注册用户
- *     → 匹配成功 → onLoginSuccess() → Index 切换到主界面
- *     → 匹配失败 → 显示错误提示
- *
- *   【注册模式】（点"去注册"切换）
- *   用户输入账号 → this.regAccount
- *   用户输入密码 → this.regPassword
- *   用户确认密码 → this.regConfirm
- *   用户点"注册" → onClick
- *     → 校验：两次密码一致、非空
- *     → 存入本地存储（preferences）
- *     → 提示成功 → 切回登录模式
- *
- * ============================================================
- * 本课涉及的核心概念：
- * ============================================================
- *   TextInput            — 文本输入框组件
- *   InputType.Password   — 密码模式（输入内容自动隐藏）
- *   InputType.Normal     — 普通文本模式
- *   .onChange()          — 输入变化回调，每次按键都触发
- *   .placeholder         — 输入框占位提示文字
- *   showPasswordIcon     — 密码可见/不可见切换按钮
- *   @State               — 状态变量，和 TextInput 双向绑定
+ * 对接后端 POST /api/auth/login 和 POST /api/auth/register
  */
 
-import { preferences } from '@kit.ArkData';
-
-// ---------- 本地存储 key ----------
-const STORE_NAME = 'lenglian_user';
+import { apiService } from '../services/ApiService';
 
 @Component
 export struct LoginPage {
@@ -61,6 +25,7 @@ export struct LoginPage {
 
   // ------ 错误提示 ------
   @State errorMsg: string = '';
+  @State isSubmitting: boolean = false; // 防止重复提交
 
   build() {
     Column() {
@@ -158,15 +123,16 @@ export struct LoginPage {
         })
 
       // ---- 登录按钮 ----
-      Button('登  录')
+      Button(this.isSubmitting ? '登录中...' : '登  录')
         .width('100%')
         .height(48)
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
         .fontColor('#FFFFFF')
-        .backgroundColor('#1a73e8')
+        .backgroundColor(this.isSubmitting ? '#93C5FD' : '#1a73e8')
         .borderRadius(8)
         .margin({ top: 8 })
+        .enabled(!this.isSubmitting)
         .onClick(() => {
           this.handleLogin();
         })
@@ -237,15 +203,16 @@ export struct LoginPage {
         })
 
       // ---- 注册按钮 ----
-      Button('注  册')
+      Button(this.isSubmitting ? '注册中...' : '注  册')
         .width('100%')
         .height(48)
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
         .fontColor('#FFFFFF')
-        .backgroundColor('#4CAF50')
+        .backgroundColor(this.isSubmitting ? '#A5D6A7' : '#4CAF50')
         .borderRadius(8)
         .margin({ top: 8 })
+        .enabled(!this.isSubmitting)
         .onClick(() => {
           this.handleRegister();
         })
@@ -255,44 +222,41 @@ export struct LoginPage {
   }
 
   // ============================================================
-  // 登录逻辑
+  // 登录逻辑 → 对接后端 POST /api/auth/login
   // ============================================================
-  handleLogin(): void {
-    // 1. 基础校验：不能为空
+  async handleLogin(): Promise<void> {
     if (this.account.trim() === '' || this.password.trim() === '') {
       this.errorMsg = '账号和密码不能为空';
       return;
     }
 
-    // 2. 查询本地存储中是否有匹配的注册用户
-    //    后续课程连接到真实后端时，这里替换为网络请求
-    try {
-      let context = this.getUIContext().getHostContext();
-      let prefs = preferences.getPreferencesSync(context, { name: STORE_NAME });
-      let savedPassword = prefs.getSync(this.account, '') as string;
+    this.isSubmitting = true;
+    this.errorMsg = '';
 
-      if (savedPassword === '') {
-        this.errorMsg = '账号不存在，请先注册';
-      } else if (savedPassword === this.password) {
-        console.info('[Login] 登录成功，账号:', this.account);
-        if (this.onLoginSuccess) {
-          this.onLoginSuccess();
-        }
-      } else {
-        this.errorMsg = '密码错误';
+    try {
+      await apiService.login(this.account.trim(), this.password);
+      console.info('[Login] 登录成功, 账号:', this.account);
+      if (this.onLoginSuccess) {
+        this.onLoginSuccess();
       }
-      prefs.flush();
-    } catch (err) {
-      console.error('[Login] 读取存储失败:', JSON.stringify(err));
-      this.errorMsg = '系统错误，请重试';
+    } catch (err: Object) {
+      let msg = String((err as Error).message || '');
+      // 后端返回 401 时尝试从响应中提取 detail
+      if (msg.includes('401') || msg.includes('Invalid')) {
+        this.errorMsg = '用户名或密码错误';
+      } else if (msg.includes('网络')) {
+        this.errorMsg = '网络请求失败，请检查网络连接';
+      } else {
+        this.errorMsg = msg || '登录失败，请重试';
+      }
     }
+    this.isSubmitting = false;
   }
 
   // ============================================================
-  // 注册逻辑
+  // 注册逻辑 → 对接后端 POST /api/auth/register
   // ============================================================
-  handleRegister(): void {
-    // 1. 基础校验
+  async handleRegister(): Promise<void> {
     if (this.regAccount.trim().length < 3) {
       this.errorMsg = '账号至少需要3位字符';
       return;
@@ -306,33 +270,28 @@ export struct LoginPage {
       return;
     }
 
-    // 2. 检查账号是否已存在
+    this.isSubmitting = true;
+    this.errorMsg = '';
+
     try {
-      let context = this.getUIContext().getHostContext();
-      let prefs = preferences.getPreferencesSync(context, { name: STORE_NAME });
-      let exist = prefs.getSync(this.regAccount, '') as string;
+      await apiService.register(this.regAccount.trim(), this.regPassword);
+      console.info('[Login] 注册成功, 账号:', this.regAccount);
 
-      if (exist !== '') {
-        this.errorMsg = '该账号已被注册';
-        prefs.flush();
-        return;
-      }
-
-      // 3. 保存注册信息到本地存储
-      prefs.putSync(this.regAccount, this.regPassword);
-      prefs.flush();
-
-      console.info('[Login] 注册成功，账号:', this.regAccount);
-
-      // 4. 清空注册表单，切换到登录模式
+      // 清空注册表单，切换到登录模式
       this.regAccount = '';
       this.regPassword = '';
       this.regConfirm = '';
       this.isLoginMode = true;
-      this.errorMsg = '';
-    } catch (err) {
-      console.error('[Login] 保存注册信息失败:', JSON.stringify(err));
-      this.errorMsg = '注册失败，请重试';
+    } catch (err: Object) {
+      let msg = String((err as Error).message || '');
+      if (msg.includes('409') || msg.includes('already')) {
+        this.errorMsg = '该账号已被注册';
+      } else if (msg.includes('网络')) {
+        this.errorMsg = '网络请求失败，请检查网络连接';
+      } else {
+        this.errorMsg = msg || '注册失败，请重试';
+      }
     }
+    this.isSubmitting = false;
   }
 }
