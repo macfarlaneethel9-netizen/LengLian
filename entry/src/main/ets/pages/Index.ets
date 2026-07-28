@@ -68,16 +68,16 @@ struct Index {
   @State isLoggedIn: boolean = false;              // 是否已登录（控制显示哪个界面）
   @State showSidebar: boolean = false;             // 侧边栏是否展开
   @State currentPage: string = 'Dashboard';        // 当前显示的功能页
-  @State currentLabel: string = '仪表盘';           // 顶部标题
+  @State currentLabel: string = '仪表盘';            // 顶部标题
 
   // ====== 登录后的侧边栏菜单 ======
   private menusAfterLogin: SideMenu[] = [
-    new SideMenu('UserInfo',         '用户信息', '👤'),
-    new SideMenu('Dashboard',        '仪表盘',   '📊'),
+    new SideMenu('Dashboard',       '仪表盘',   '📊'),
     new SideMenu('DeviceList',       '设备列表', '📋'),
     new SideMenu('WarehouseStatus',  '仓库状态', '🏭'),
     new SideMenu('AlarmLog',         '事件日志', '🔔'),
     new SideMenu('WarehouseSwitch',  '仓库开关', '⚡'),
+    new SideMenu('UserInfo',         '系统管理', '👤'),
   ];
 
   aboutToAppear(): void {
@@ -145,7 +145,9 @@ struct Index {
           .shadow({ radius: 2, color: '#00000008', offsetY: 1 })
 
           // ---- 内容切换区 ----
-          if (this.currentPage === 'UserInfo') {
+          if (this.currentPage === 'Dashboard') {
+            DashboardPage()
+          } else if (this.currentPage === 'UserInfo') {
             this.UserInfoContent()
           } else if (this.currentPage === 'Dashboard') {
             DashboardPage()

@@ -7,6 +7,7 @@
 
 import { PageTitle } from '../components/CommonBuilders';
 import { apiService, DeviceInfo, fmtTemp, fmtHumi, fmtLux, getAlarm, getAlarmReason, getTemp, getLux } from '../services/ApiService';
+import { realtimeService } from '../services/RealtimeService';
 
 @Component
 export struct DeviceListPage {
@@ -20,10 +21,21 @@ export struct DeviceListPage {
     this.isMounted = true;
     console.info('[DeviceList] aboutToAppear → 开始加载');
     this.fetchDevices();
+    // 订阅实时数据，设备状态自动刷新
+    realtimeService.onUpdate((devices: DeviceInfo[]) => {
+      this.devices = devices;
+      let now = new Date();
+      this.lastRefresh =
+        `${now.getHours().toString().padStart(2, '0')}:` +
+        `${now.getMinutes().toString().padStart(2, '0')}:` +
+        `${now.getSeconds().toString().padStart(2, '0')}`;
+    });
+    realtimeService.start(3000);
   }
 
   aboutToDisappear(): void {
     this.isMounted = false;
+    realtimeService.stop();
     console.info('[DeviceList] aboutToDisappear → 已卸载');
   }
 
