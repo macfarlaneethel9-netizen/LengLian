@@ -76,6 +76,28 @@ export struct DeviceListPage {
     }
   }
 
+  async runDiagnostic(): Promise<void> {
+    this.isLoading = true;
+    this.errorText = '诊断中...';
+    let result = '';
+    // 测试健康检查接口（无需鉴权）
+    try {
+      let data = await apiService.healthCheck();
+      result += '✅ 后端可达: ' + JSON.stringify(data).substring(0, 100) + '\n';
+    } catch (err) {
+      result += '❌ 后端不可达: ' + String((err as Error).message) + '\n';
+    }
+    // 测试设备接口（需鉴权）
+    try {
+      let r = await apiService.getDevices(1, 5);
+      result += `✅ 鉴权正常, 设备数=${r.total}`;
+    } catch (err) {
+      result += '❌ 鉴权失败或无设备: ' + String((err as Error).message);
+    }
+    this.errorText = result;
+    this.isLoading = false;
+  }
+
   getTempColor(temp: number): string {
     if (temp > 8) { return '#F44336'; }
     if (temp < 2) { return '#FF9800'; }
@@ -139,11 +161,15 @@ export struct DeviceListPage {
       }
 
       // ---- 空数据 ----
-      if (this.devices.length === 0 && !this.isLoading) {
-        Text('暂无设备数据')
-          .fontSize(14)
-          .fontColor('#999')
-          .margin({ top: 40 })
+      if (this.devices.length === 0 && !this.isLoading && this.errorText === '') {
+        Column({ space: 12 }) {
+          Text('暂无设备数据')
+            .fontSize(14).fontColor('#999')
+          Button('🔍 网络诊断')
+            .fontSize(13).height(36).backgroundColor('#1a73e8').fontColor('#FFFFFF').borderRadius(20)
+            .onClick(() => { this.runDiagnostic(); })
+        }
+        .margin({ top: 40 })
       }
 
       // ---- 设备卡片列表 ----
