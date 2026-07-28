@@ -2,15 +2,13 @@
  * API 服务层
  *
  * 封装对冷链监控后端的所有 HTTP 请求。
- * 使用 HarmonyOS @kit.NetworkKit 的 http 模块。
- *
  * Base URL: http://123.60.36.30/api
  */
 
 import { http } from '@kit.NetworkKit';
 
 // ============================================================
-// 数据类型
+// 数据类型 — 字段与后端 JSON 严格对齐
 // ============================================================
 
 export interface UserInfo {
@@ -80,7 +78,56 @@ export interface EventListResult {
 }
 
 // ============================================================
-// 请求体类（ArkTS 要求 object 字面量必须对应显式声明的 class）
+// 安全格式化工具 — 防御 telemetry 字段为 null/undefined
+// ============================================================
+
+export function fmtTemp(telemetry: TelemetryData | undefined | null): string {
+  if (!telemetry || typeof telemetry.temp !== 'number') {
+    return '--';
+  }
+  return telemetry.temp.toFixed(1);
+}
+
+export function fmtHumi(telemetry: TelemetryData | undefined | null): string {
+  if (!telemetry || typeof telemetry.humi !== 'number') {
+    return '--';
+  }
+  return telemetry.humi.toFixed(1);
+}
+
+export function fmtLux(telemetry: TelemetryData | undefined | null): string {
+  if (!telemetry || typeof telemetry.lux !== 'number') {
+    return '--';
+  }
+  return telemetry.lux.toFixed(0);
+}
+
+export function getTemp(telemetry: TelemetryData | undefined | null): number {
+  return (telemetry && typeof telemetry.temp === 'number') ? telemetry.temp : 0;
+}
+
+export function getHumi(telemetry: TelemetryData | undefined | null): number {
+  return (telemetry && typeof telemetry.humi === 'number') ? telemetry.humi : 0;
+}
+
+export function getLux(telemetry: TelemetryData | undefined | null): number {
+  return (telemetry && typeof telemetry.lux === 'number') ? telemetry.lux : 0;
+}
+
+export function getTilt(telemetry: TelemetryData | undefined | null): number {
+  return (telemetry && typeof telemetry.tilt === 'number') ? telemetry.tilt : 0;
+}
+
+export function getAlarm(telemetry: TelemetryData | undefined | null): number {
+  return (telemetry && typeof telemetry.alarm === 'number') ? telemetry.alarm : 0;
+}
+
+export function getAlarmReason(telemetry: TelemetryData | undefined | null): string {
+  return (telemetry && typeof telemetry.alarm_reason === 'string') ? telemetry.alarm_reason : '';
+}
+
+// ============================================================
+// 请求体类
 // ============================================================
 
 class LoginBody {
@@ -131,18 +178,27 @@ class ApiService {
   }
 
   // ----------------------------------------------------------
-  // 底层 HTTP 请求
+  // 底层 HTTP 请求 — 全量日志
   // ----------------------------------------------------------
   private async request(
     method: http.RequestMethod,
     path: string,
     body?: Object
   ): Promise<string> {
-    let httpRequest = http.createHttp();
+    let url = BASE_URL + path;
     let headers = this.buildHeaders();
+    let hasToken = this.token.length > 0;
+
+    // 阶段四：记录每次请求的完整信息
+    console.info(
+      `[ApiService] --> ${http.RequestMethod[method]} ${path} | token=${hasToken}`
+    );
+
+    let httpRequest = http.createHttp();
 
     try {
-      let resp = await httpRequest.request(BASE_URL + path, {
+      let startMs = Date.now();
+      let resp = await httpRequest.request(url, {
         method: method,
         header: headers,
         extraData: body ? JSON.stringify(body) : undefined,
@@ -150,11 +206,21 @@ class ApiService {
         connectTimeout: 10000,
         readTimeout: 10000
       });
+      let elapsed = Date.now() - startMs;
+      let bodyStr = resp.result as string;
+      let preview = bodyStr.length > 200 ? bodyStr.substring(0, 200) + '...' : bodyStr;
+
+      console.info(
+        `[ApiService] <-- ${http.RequestMethod[method]} ${path} | ${elapsed}ms | len=${bodyStr.length} | preview=${preview}`
+      );
+
       httpRequest.destroy();
-      return resp.result as string;
+      return bodyStr;
     } catch (err) {
       httpRequest.destroy();
-      console.error('[ApiService] HTTP error:', JSON.stringify(err));
+      console.error(
+        `[ApiService] ERR ${http.RequestMethod[method]} ${path} | ${JSON.stringify(err)}`
+      );
       throw new Error('网络请求失败，请检查网络连接');
     }
   }
@@ -169,7 +235,7 @@ class ApiService {
     let result = JSON.parse(data) as LoginResult;
     this.token = result.token;
     this.currentUser = result.user;
-    console.info('[ApiService] 登录成功, user:', result.user.username);
+    console.info(`[ApiService] 登录成功 | user=${result.user.username} | token=${this.token.substring(0, 20)}...`);
     return result;
   }
 
@@ -183,7 +249,7 @@ class ApiService {
     let result = JSON.parse(data) as LoginResult;
     this.token = result.token;
     this.currentUser = result.user;
-    console.info('[ApiService] 注册成功, user:', result.user.username);
+    console.info(`[ApiService] 注册成功 | user=${result.user.username}`);
     return result;
   }
 
@@ -199,7 +265,9 @@ class ApiService {
       http.RequestMethod.GET,
       `/devices?page=${page}&page_size=${pageSize}`
     );
-    return JSON.parse(data) as DeviceListResult;
+    let result = JSON.parse(data) as DeviceListResult;
+    console.info(`[ApiService] getDevices → total=${result.total} items=${result.items ? result.items.length : 0}`);
+    return result;
   }
 
   // ----------------------------------------------------------
@@ -226,10 +294,10 @@ class ApiService {
     pageSize: number = 200
   ): Promise<TelemetryListResult> {
     let params = `page=${page}&page_size=${pageSize}`;
-    if (from) {
+    if (from !== undefined) {
       params += `&from=${from}`;
     }
-    if (to) {
+    if (to !== undefined) {
       params += `&to=${to}`;
     }
     let data = await this.request(

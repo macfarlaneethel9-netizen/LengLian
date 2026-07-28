@@ -17,13 +17,14 @@
  *     │
  *     ├─ isLoggedIn == true → 主界面
  *     │    ├─ 顶部栏（汉堡按钮 + 标题）
- *     │    ├─ 内容区（默认温度监控，侧边栏菜单控制切换）
+ *     │    ├─ 内容区（默认仪表盘，侧边栏菜单控制切换）
  *     │    └─ Stack 层叠：
  *     │         ├─ 内容区（始终显示）
  *     │         └─ showSidebar == true
  *     │              ├─ 半透明遮罩（点击关闭侧边栏）
  *     │              └─ 侧边栏抽屉（从左侧滑入）
  *     │                    ├─ 用户信息
+ *     │                    ├─ 仪表盘
  *     │                    ├─ 设备列表
  *     │                    ├─ 仓库状态
  *     │                    │    ├─ 温度监控
@@ -40,6 +41,7 @@
  */
 
 import { LoginPage } from './Login';
+import { DashboardPage } from './Dashboard';
 import { DeviceListPage } from './DeviceList';
 import { WarehouseStatusPage } from './WarehouseStatus';
 import { AlarmLogPage } from './AlarmLog';
@@ -65,12 +67,13 @@ struct Index {
   // ====== 全局状态 ======
   @State isLoggedIn: boolean = false;              // 是否已登录（控制显示哪个界面）
   @State showSidebar: boolean = false;             // 侧边栏是否展开
-  @State currentPage: string = 'DeviceList';       // 当前显示的功能页
-  @State currentLabel: string = '设备列表';         // 顶部标题
+  @State currentPage: string = 'Dashboard';        // 当前显示的功能页
+  @State currentLabel: string = '仪表盘';           // 顶部标题
 
   // ====== 登录后的侧边栏菜单 ======
   private menusAfterLogin: SideMenu[] = [
     new SideMenu('UserInfo',         '用户信息', '👤'),
+    new SideMenu('Dashboard',        '仪表盘',   '📊'),
     new SideMenu('DeviceList',       '设备列表', '📋'),
     new SideMenu('WarehouseStatus',  '仓库状态', '🏭'),
     new SideMenu('AlarmLog',         '事件日志', '🔔'),
@@ -84,8 +87,8 @@ struct Index {
   // ====== 登录成功回调（传给 LoginPage）======
   onLoginSuccess = (): void => {
     this.isLoggedIn = true;
-    this.currentPage = 'DeviceList';
-    this.currentLabel = '设备列表';
+    this.currentPage = 'Dashboard';
+    this.currentLabel = '仪表盘';
     console.info('[Index] 登录成功，进入主界面');
   };
 
@@ -144,6 +147,8 @@ struct Index {
           // ---- 内容切换区 ----
           if (this.currentPage === 'UserInfo') {
             this.UserInfoContent()
+          } else if (this.currentPage === 'Dashboard') {
+            DashboardPage()
           } else if (this.currentPage === 'DeviceList') {
             DeviceListPage()
           } else if (this.currentPage === 'WarehouseStatus') {

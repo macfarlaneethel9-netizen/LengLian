@@ -1,12 +1,12 @@
 /**
- * 设备列表页面 — 独立模块
+ * 设备列表页面
  *
  * 拉取 GET /api/devices，展示所有冷链设备的概览卡片。
- * 每张卡片显示：名称、在线状态、温度、湿度、光照、告警、位置、更新时间。
+ * 手动点 🔄 刷新，带挂载安全检查。
  */
 
 import { PageTitle } from '../components/CommonBuilders';
-import { apiService, DeviceInfo } from '../services/ApiService';
+import { apiService, DeviceInfo, fmtTemp, fmtHumi, fmtLux, getAlarm, getAlarmReason, getTemp, getLux } from '../services/ApiService';
 
 @Component
 export struct DeviceListPage {
@@ -14,26 +14,54 @@ export struct DeviceListPage {
   @State isLoading: boolean = true;
   @State errorText: string = '';
   @State lastRefresh: string = '--:--:--';
+  private isMounted: boolean = false;
 
   aboutToAppear(): void {
+    this.isMounted = true;
+    console.info('[DeviceList] aboutToAppear → 开始加载');
     this.fetchDevices();
+  }
+
+  aboutToDisappear(): void {
+    this.isMounted = false;
+    console.info('[DeviceList] aboutToDisappear → 已卸载');
   }
 
   async fetchDevices(): Promise<void> {
     this.isLoading = true;
     this.errorText = '';
+    console.info('[DeviceList] fetchDevices 发起请求...');
+
     try {
       let result = await apiService.getDevices(1, 50);
-      this.devices = result.items;
+
+      // 阶段三：页面已销毁则忽略
+      if (!this.isMounted) {
+        console.warn('[DeviceList] 页面已销毁，忽略返回');
+        return;
+      }
+
+      console.info(`[DeviceList] 返回: total=${result.total} items=${result.items ? result.items.length : 0}`);
+
+      if (result.items && result.items.length > 0) {
+        this.devices = result.items;
+      }
+
       let now = new Date();
       this.lastRefresh =
         `${now.getHours().toString().padStart(2, '0')}:` +
         `${now.getMinutes().toString().padStart(2, '0')}:` +
         `${now.getSeconds().toString().padStart(2, '0')}`;
     } catch (err) {
-      this.errorText = '加载失败：' + String((err as Error).message || '未知错误');
+      console.error('[DeviceList] 请求异常:', JSON.stringify(err));
+      if (this.isMounted) {
+        this.errorText = '加载失败：' + String((err as Error).message || '未知错误');
+      }
     }
-    this.isLoading = false;
+
+    if (this.isMounted) {
+      this.isLoading = false;
+    }
   }
 
   getTempColor(temp: number): string {
@@ -99,8 +127,8 @@ export struct DeviceListPage {
       }
 
       // ---- 空数据 ----
-      if (this.devices.length === 0 && !this.isLoading && this.errorText === '') {
-        Text('暂无设备，请先添加设备')
+      if (this.devices.length === 0 && !this.isLoading) {
+        Text('暂无设备数据')
           .fontSize(14)
           .fontColor('#999')
           .margin({ top: 40 })
@@ -128,12 +156,11 @@ export struct DeviceListPage {
   }
 
   // ============================================================
-  // @Builder：设备概览卡片
+  // @Builder：设备概览卡片 — 使用安全格式化函数
   // ============================================================
   @Builder
   DeviceCard(device: DeviceInfo) {
     Column({ space: 8 }) {
-      // 名称 + 在线
       Row() {
         Text(device.name || device.device_id)
           .fontSize(16)
@@ -146,7 +173,6 @@ export struct DeviceListPage {
       }
       .width('100%')
 
-      // 位置
       if (device.location) {
         Text(`📍 ${device.location}`)
           .fontSize(12)
@@ -155,13 +181,12 @@ export struct DeviceListPage {
 
       Divider().color('#F0F0F0')
 
-      // 四列遥测
       Row() {
         Column() {
           Text('温度').fontSize(11).fontColor('#999')
-          Text(`${device.last_telemetry.temp.toFixed(1)}℃`)
+          Text(`${fmtTemp(device.last_telemetry)}℃`)
             .fontSize(20)
-            .fontColor(this.getTempColor(device.last_telemetry.temp))
+            .fontColor(this.getTempColor(getTemp(device.last_telemetry)))
             .fontWeight(FontWeight.Bold)
             .margin({ top: 2 })
         }
@@ -169,7 +194,7 @@ export struct DeviceListPage {
 
         Column() {
           Text('湿度').fontSize(11).fontColor('#999')
-          Text(`${device.last_telemetry.humi.toFixed(1)}%`)
+          Text(`${fmtHumi(device.last_telemetry)}%`)
             .fontSize(20)
             .fontColor('#2196F3')
             .fontWeight(FontWeight.Bold)
@@ -179,9 +204,9 @@ export struct DeviceListPage {
 
         Column() {
           Text('光照').fontSize(11).fontColor('#999')
-          Text(`${device.last_telemetry.lux.toFixed(0)} lux`)
+          Text(`${fmtLux(device.last_telemetry)} lux`)
             .fontSize(20)
-            .fontColor(this.getLuxColor(device.last_telemetry.lux))
+            .fontColor(this.getLuxColor(getLux(device.last_telemetry)))
             .fontWeight(FontWeight.Bold)
             .margin({ top: 2 })
         }
@@ -189,7 +214,7 @@ export struct DeviceListPage {
 
         Column() {
           Text('告警').fontSize(11).fontColor('#999')
-          Text(device.last_telemetry.alarm === 1 ? '⚠️' : '✅')
+          Text(getAlarm(device.last_telemetry) === 1 ? '⚠️' : '✅')
             .fontSize(20)
             .margin({ top: 2 })
         }
@@ -197,15 +222,13 @@ export struct DeviceListPage {
       }
       .width('100%')
 
-      // 告警原因
-      if (device.last_telemetry.alarm === 1 && device.last_telemetry.alarm_reason) {
-        Text(`告警: ${device.last_telemetry.alarm_reason}`)
+      if (getAlarm(device.last_telemetry) === 1 && getAlarmReason(device.last_telemetry).length > 0) {
+        Text(`告警: ${getAlarmReason(device.last_telemetry)}`)
           .fontSize(11)
           .fontColor('#F44336')
           .width('100%')
       }
 
-      // 更新时间
       Text(`更新: ${this.formatTime(device.last_seen)}`)
         .fontSize(11)
         .fontColor('#BBB')
