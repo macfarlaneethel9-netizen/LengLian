@@ -55,6 +55,28 @@ export struct AlarmLogPage {
     }
   }
 
+  formatDetail(detail: object): string {
+    try {
+      let s = JSON.stringify(detail);
+      // 去掉引号和花括号，换成可读格式
+      s = s.replace(/[{}"]/g, '');
+      s = s.replace(/,/g, '  |  ');
+      s = s.replace(/:/g, ': ');
+      // 翻译常见 key
+      s = s.replace(/temp/g, '温度');
+      s = s.replace(/humi/g, '湿度');
+      s = s.replace(/lux/g, '光照');
+      s = s.replace(/tilt/g, '倾斜');
+      s = s.replace(/threshold/g, '阈值');
+      s = s.replace(/motor/g, '电机');
+      s = s.replace(/msg/g, '信息');
+      s = s.replace(/user/g, '用户');
+      return s;
+    } catch (_) {
+      return '';
+    }
+  }
+
   getKindColor(kind: string): string {
     switch (kind) {
       case 'alarm': return '#F44336';
@@ -123,28 +145,36 @@ export struct AlarmLogPage {
         List({ space: 8 }) {
           ForEach(this.events, (event: EventItem) => {
             ListItem() {
-              Row() {
-                // 类型标记
-                Text(this.getKindLabel(event.kind))
-                  .fontSize(11)
-                  .fontColor('#FFFFFF')
-                  .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-                  .backgroundColor(this.getKindColor(event.kind))
-                  .borderRadius(4)
+              Column({ space: 6 }) {
+                // 第一行：类型 + 设备 + 时间
+                Row() {
+                  Text(this.getKindLabel(event.kind))
+                    .fontSize(11).fontColor('#FFFFFF')
+                    .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+                    .backgroundColor(this.getKindColor(event.kind))
+                    .borderRadius(4)
 
-                Column() {
                   Text(event.device_id)
                     .fontSize(14).fontWeight(FontWeight.Medium).fontColor('#333')
+                    .margin({ left: 10 })
+
+                  Blank()
+
                   Text(this.formatTime(event.ts))
-                    .fontSize(11).fontColor('#BBB').margin({ top: 2 })
+                    .fontSize(11).fontColor('#BBB')
                 }
-                .alignItems(HorizontalAlign.Start)
-                .margin({ left: 10 })
+                .width('100%')
 
-                Blank()
-
-                Text('>')
-                  .fontSize(16).fontColor('#CCC').fontWeight(FontWeight.Bold)
+                // 第二行：详情（格式化显示 detail 对象）
+                if (event.detail) {
+                  Text(this.formatDetail(event.detail))
+                    .fontSize(12).fontColor('#666')
+                    .width('100%')
+                    .maxLines(3)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                    .padding({ top: 6, left: 4, right: 4 })
+                    .margin({ top: 2 })
+                }
               }
               .width('100%')
               .padding(14)

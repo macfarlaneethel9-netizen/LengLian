@@ -48,6 +48,14 @@ import { AlarmLogPage } from './AlarmLog';
 import { WarehouseSwitchPage } from './WarehouseSwitch';
 import { apiService } from '../services/ApiService';
 
+// 初始化跨页面共享数据
+AppStorage.setOrCreate('tempThresholdHigh', 8);
+AppStorage.setOrCreate('tempThresholdLow', 2);
+AppStorage.setOrCreate('humiThresholdHigh', 80);
+AppStorage.setOrCreate('humiThresholdLow', 20);
+AppStorage.setOrCreate('luxThreshold', 200);
+AppStorage.setOrCreate('tiltThreshold', 15000);
+
 // ---------- 侧边栏菜单项 ----------
 class SideMenu {
   pageId: string;

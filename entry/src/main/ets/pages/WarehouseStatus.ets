@@ -1,10 +1,10 @@
 /**
  * 仓库状态页面
  *
- * 集中展示所有设备的温度、光照、湿度，
+ * 集中展示所有设备的温度、光照、湿度、倾斜，
  * 数据来源于后端 GET /api/devices，手动刷新。
  *
- * Tab：🌡️ 温度 / 💡 光照 / 💧 湿度
+ * Tab：🌡️ 温度 / 💡 光照 / 💧 湿度 / 📐 倾斜
  */
 
 import { PageTitle } from '../components/CommonBuilders';
@@ -71,7 +71,7 @@ export struct WarehouseStatusPage {
     }
   }
 
-  // ---- 告警判断 ----
+  // ---- 温度告警判断 ----
   getTempLevel(temp: number): string {
     if (temp > 8) { return '高温告警'; }
     if (temp < 2) { return '低温告警'; }
@@ -82,6 +82,8 @@ export struct WarehouseStatusPage {
     if (temp < 2) { return '#FF9800'; }
     return '#4CAF50';
   }
+
+  // ---- 光照告警判断 ----
   getLuxLevel(lux: number): string {
     if (lux > 200) { return '过亮'; }
     if (lux < 50)  { return '偏暗'; }
@@ -92,6 +94,8 @@ export struct WarehouseStatusPage {
     if (lux < 50)  { return '#9E9E9E'; }
     return '#4CAF50';
   }
+
+  // ---- 湿度告警判断 ----
   getHumiLevel(humi: number): string {
     if (humi > 80) { return '湿度过高'; }
     if (humi < 20) { return '湿度过低'; }
@@ -102,6 +106,22 @@ export struct WarehouseStatusPage {
     if (humi < 20) { return '#F44336'; }
     return '#2196F3';
   }
+
+  // ---- 倾斜告警判断 ----
+  getTiltLevel(tilt: number): string {
+    if (tilt > 15000) { return '倾斜告警'; }
+    if (tilt > 8000)  { return '轻微倾斜'; }
+    return '正常';
+  }
+  getTiltColor(tilt: number): string {
+    if (tilt > 15000) { return '#F44336'; }
+    if (tilt > 8000)  { return '#FF9800'; }
+    return '#4CAF50';
+  }
+  getTiltRatio(tilt: number): number {
+    return Math.min(tilt / 30000, 1);
+  }
+
   formatTime(ts: number): string {
     if (!ts || ts <= 0) { return '--:--:--'; }
     let date = new Date(ts * 1000);
@@ -183,6 +203,19 @@ export struct WarehouseStatusPage {
           }
         }
         .tabBar(this.TabLabel('💧 湿度', 2))
+
+        TabContent() {
+          if (this.devices.length > 0) {
+            List({ space: 12 }) {
+              ForEach(this.devices, (device: DeviceInfo) => {
+                ListItem() { this.TiltCard(device) }
+              })
+            }
+            .width('100%').layoutWeight(1).scrollBar(BarState.Off)
+            .padding({ top: 8, bottom: 16 })
+          }
+        }
+        .tabBar(this.TabLabel('📐 倾斜', 3))
       }
       .width('100%').layoutWeight(1).backgroundColor('#F5F5F5').barMode(BarMode.Fixed)
       .onChange((index: number) => { this.currentTabIndex = index; })
@@ -281,14 +314,6 @@ export struct WarehouseStatusPage {
         Text('亮').fontSize(10).fontColor('#999')
       }.width('100%')
 
-      Row() {
-        Text('倾斜量').fontSize(12).fontColor('#999')
-        Text(`${getTilt(device.last_telemetry).toFixed(0)}`)
-          .fontSize(14).fontWeight(FontWeight.Bold)
-          .fontColor(getTilt(device.last_telemetry) > 15000 ? '#F44336' : '#333')
-          .margin({ left: 8 })
-      }
-
       Text(`更新: ${this.formatTime(device.last_seen)}`)
         .fontSize(11).fontColor('#BBB').width('100%').textAlign(TextAlign.End)
     }
@@ -335,6 +360,73 @@ export struct WarehouseStatusPage {
           .fontColor(this.getTempColor(getTemp(device.last_telemetry)))
           .margin({ left: 8 })
       }
+
+      if (getAlarm(device.last_telemetry) === 1 && getAlarmReason(device.last_telemetry).length > 0) {
+        Row() {
+          Text('⚠️').fontSize(14)
+          Text(getAlarmReason(device.last_telemetry)).fontSize(13).fontColor('#F44336').margin({ left: 4 })
+        }.width('100%').padding(10).backgroundColor('#FFF3F0').borderRadius(8)
+      }
+
+      Text(`更新: ${this.formatTime(device.last_seen)}`)
+        .fontSize(11).fontColor('#BBB').width('100%').textAlign(TextAlign.End)
+    }
+    .width('100%').padding(16).backgroundColor('#FFFFFF').borderRadius(12)
+    .shadow({ radius: 4, color: '#00000008', offsetY: 2 })
+  }
+
+  // ---- 倾斜卡片 ----
+  @Builder TiltCard(device: DeviceInfo) {
+    Column({ space: 10 }) {
+      Row() {
+        Text(device.name || device.device_id).fontSize(15).fontWeight(FontWeight.Bold).fontColor('#333')
+        Blank()
+        Text(device.online ? '在线' : '离线')
+          .fontSize(11).fontColor(device.online ? '#4CAF50' : '#999')
+          .padding({ left: 8, right: 8, top: 2, bottom: 2 })
+          .backgroundColor(device.online ? '#E8F5E9' : '#F5F5F5').borderRadius(4)
+      }.width('100%')
+
+      Row() {
+        Column() {
+          Text('当前倾斜').fontSize(12).fontColor('#999')
+          Text(`${getTilt(device.last_telemetry).toFixed(0)}`)
+            .fontSize(36).fontColor(this.getTiltColor(getTilt(device.last_telemetry))).fontWeight(FontWeight.Bold).margin({ top: 4 })
+        }
+        Blank()
+        Column() {
+          Text('倾斜状态').fontSize(12).fontColor('#999')
+          Text(this.getTiltLevel(getTilt(device.last_telemetry)))
+            .fontSize(14).fontColor(this.getTiltColor(getTilt(device.last_telemetry))).fontWeight(FontWeight.Bold).margin({ top: 4 })
+        }.alignItems(HorizontalAlign.End)
+      }.width('100%')
+
+      // 倾斜进度条
+      Row() {
+        Text('0').fontSize(10).fontColor('#999')
+        Column() {}.layoutWeight(1).height(6).backgroundColor('#E0E0E0').borderRadius(3).margin({ left: 8, right: 8 })
+        Text('30000').fontSize(10).fontColor('#999')
+      }.width('100%')
+
+      // 倾斜量可视化：根据数值填充进度条
+      Row() {
+        Text('倾斜量').fontSize(12).fontColor('#999')
+        Text(`${getTilt(device.last_telemetry).toFixed(0)}`)
+          .fontSize(14).fontWeight(FontWeight.Bold)
+          .fontColor(this.getTiltColor(getTilt(device.last_telemetry)))
+          .margin({ left: 8 })
+        Blank()
+        // 倾斜比例条
+        Row() {
+          Column() {}
+            .width(`${(this.getTiltRatio(getTilt(device.last_telemetry)) * 100).toFixed(0)}%`)
+            .height(8)
+            .backgroundColor(this.getTiltColor(getTilt(device.last_telemetry)))
+            .borderRadius(4)
+          Column() {}.layoutWeight(1)
+        }
+        .width(80).height(8).backgroundColor('#F0F0F0').borderRadius(4)
+      }.width('100%')
 
       if (getAlarm(device.last_telemetry) === 1 && getAlarmReason(device.last_telemetry).length > 0) {
         Row() {

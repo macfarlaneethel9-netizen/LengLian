@@ -1,47 +1,104 @@
 /**
- * 仪表盘首页
+ * 仪表盘 — 实时滚动曲线 + 四宫格指标
  *
- * 实时概览所有设备状态：在线数、告警数、温度/湿度/光照分布。
- * 每 3 秒自动刷新，数据来自后端 API（后端持续从华为云 IoT 接收）。
+ * 每 3 秒从后端拉一次数据，追加到实时曲线图中。
+ * 保留最近 60 个采样点，自动滚动。
  *
  * 数据链路：
- *   RK2206 → MQTT → 华为云 IoT → AMQP → 后端 → REST API → 本页面
+ *   RK2206 → MQTT → 华为云 IoT → 后端 API → RealtimeService → 本页面
  */
 
-import { apiService, DeviceInfo } from '../services/ApiService';
+import { PageTitle } from '../components/CommonBuilders';
+import { LineChart, ChartData } from '../components/LineChart';
+import {
+  apiService, DeviceInfo, fmtTemp, fmtHumi, fmtLux, getAlarm, getAlarmReason
+} from '../services/ApiService';
 import { realtimeService } from '../services/RealtimeService';
+
+const MAX_POINTS = 60;  // 最多保留 60 个采样点
 
 @Component
 export struct DashboardPage {
+  @State deviceName: string = '';
+  @State deviceOnline: boolean = false;
+  @State deviceLocation: string = '';
   @State devices: DeviceInfo[] = [];
+
+  // 最新快照
+  @State temp: number = 0;
+  @State humi: number = 0;
+  @State lux: number = 0;
+  @State tilt: number = 0;
+  @State alarm: number = 0;
+  @State alarmReason: string = '';
+
+  // 实时曲线数据
+  @State chartData: ChartData[] = [];
   @State isLoading: boolean = true;
-  @State totalCount: number = 0;
-  @State onlineCount: number = 0;
-  @State alarmCount: number = 0;
-  @State avgTemp: number = 0;
-  @State avgHumi: number = 0;
   @State lastRefresh: string = '--:--:--';
 
+  private isMounted: boolean = false;
+
   aboutToAppear(): void {
-    this.loadData();
+    this.isMounted = true;
+    this.loadFirstData();
 
     realtimeService.onUpdate((devices: DeviceInfo[]) => {
+      if (!this.isMounted) { return; }
       this.devices = devices;
-      this.calcSummary(devices);
+      if (devices.length > 0) {
+        let d = devices[0];
+        this.deviceName = d.name || d.device_id;
+        this.deviceOnline = d.online;
+        this.deviceLocation = d.location || '';
+        this.temp = d.last_telemetry.temp;
+        this.humi = d.last_telemetry.humi;
+        this.lux = d.last_telemetry.lux;
+        this.tilt = d.last_telemetry.tilt;
+        this.alarm = d.last_telemetry.alarm;
+        this.alarmReason = d.last_telemetry.alarm_reason || '';
+
+        let now = new Date();
+        let timeLabel = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+        this.chartData.push(new ChartData(timeLabel, this.temp, this.humi, this.lux));
+
+        // 保持最多 MAX_POINTS 个点
+        while (this.chartData.length > MAX_POINTS) {
+          this.chartData.splice(0, 1);
+        }
+      }
       this.updateTime();
     });
     realtimeService.start(3000);
   }
 
   aboutToDisappear(): void {
+    this.isMounted = false;
     realtimeService.stop();
   }
 
-  async loadData(): Promise<void> {
+  async loadFirstData(): Promise<void> {
     this.isLoading = true;
     try {
-      this.devices = (await apiService.getDevices(1, 50)).items;
-      this.calcSummary(this.devices);
+      let result = await apiService.getDevices(1, 50);
+      if (!this.isMounted) { return; }
+      if (result.items && result.items.length > 0) {
+        let d = result.items[0];
+        this.devices = result.items;
+        this.deviceName = d.name || d.device_id;
+        this.deviceOnline = d.online;
+        this.deviceLocation = d.location || '';
+        this.temp = d.last_telemetry.temp;
+        this.humi = d.last_telemetry.humi;
+        this.lux = d.last_telemetry.lux;
+        this.tilt = d.last_telemetry.tilt;
+        this.alarm = d.last_telemetry.alarm;
+        this.alarmReason = d.last_telemetry.alarm_reason || '';
+
+        let now = new Date();
+        let tl = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+        this.chartData.push(new ChartData(tl, this.temp, this.humi, this.lux));
+      }
     } catch (err) {
       console.error('[Dashboard] 加载失败:', JSON.stringify(err));
     }
@@ -49,23 +106,12 @@ export struct DashboardPage {
     this.updateTime();
   }
 
-  calcSummary(devices: DeviceInfo[]): void {
-    this.totalCount = devices.length;
-    this.onlineCount = devices.filter(d => d.online).length;
-    this.alarmCount = devices.filter(d => d.last_telemetry.alarm === 1).length;
-
-    if (devices.length > 0) {
-      this.avgTemp = devices.reduce((s, d) => s + d.last_telemetry.temp, 0) / devices.length;
-      this.avgHumi = devices.reduce((s, d) => s + d.last_telemetry.humi, 0) / devices.length;
-    }
-  }
-
   updateTime(): void {
     let now = new Date();
     this.lastRefresh =
-      `${now.getHours().toString().padStart(2, '0')}:` +
-      `${now.getMinutes().toString().padStart(2, '0')}:` +
-      `${now.getSeconds().toString().padStart(2, '0')}`;
+      `${now.getHours().toString().padStart(2,'0')}:` +
+      `${now.getMinutes().toString().padStart(2,'0')}:` +
+      `${now.getSeconds().toString().padStart(2,'0')}`;
   }
 
   getTempColor(t: number): string {
@@ -74,115 +120,101 @@ export struct DashboardPage {
     return '#4CAF50';
   }
 
+  getHumiColor(h: number): string {
+    if (h > 80) { return '#FF9800'; }
+    if (h < 20) { return '#F44336'; }
+    return '#2196F3';
+  }
+
+  getLuxColor(l: number): string {
+    if (l > 200) { return '#FF9800'; }
+    return '#4CAF50';
+  }
+
+  getTiltColor(t: number): string {
+    if (t > 15000) { return '#F44336'; }
+    return '#666';
+  }
+
   build() {
     Column() {
-      if (this.isLoading && this.devices.length === 0) {
+      Row() {
+        PageTitle('仪表盘')
+        Blank()
+        Text(`刷新: ${this.lastRefresh}`).fontSize(11).fontColor('#BBB')
+      }
+      .width('100%').alignItems(VerticalAlign.Center)
+
+      if (this.isLoading) {
         Text('加载中...').fontSize(14).fontColor('#999').margin({ top: 60 })
       } else {
-        // ---- 顶栏 ----
-        Row() {
-          Text('仪表盘')
-            .fontSize(28).fontWeight(FontWeight.Bold).fontColor('#333')
-            .margin({ top: 20, bottom: 6 })
-          Blank()
-          Text(`刷新: ${this.lastRefresh}`)
-            .fontSize(11).fontColor('#BBB')
-        }
-        .width('100%')
-
-        // ---- 四宫格统计 ----
-        Grid() {
-          GridItem() {
-            this.StatCard('设备总数', `${this.totalCount}`, '#1a73e8')
-          }
-          GridItem() {
-            this.StatCard('在线设备', `${this.onlineCount}`, '#4CAF50')
-          }
-          GridItem() {
-            this.StatCard('告警设备', `${this.alarmCount}`, this.alarmCount > 0 ? '#F44336' : '#999')
-          }
-          GridItem() {
-            this.StatCard('平均温度', `${this.avgTemp.toFixed(1)}℃`, this.getTempColor(this.avgTemp))
-          }
-        }
-        .columnsTemplate('1fr 1fr')
-        .rowsTemplate('1fr 1fr')
-        .columnsGap(12)
-        .rowsGap(12)
-        .width('100%')
-        .height(200)
-        .margin({ top: 16, bottom: 16 })
-
-        // ---- 设备状态条 ----
-        Text('设备实时状态')
-          .fontSize(16).fontWeight(FontWeight.Bold).fontColor('#333')
-          .width('100%').margin({ bottom: 10 })
-
-        if (this.devices.length === 0) {
-          Text('暂无设备').fontSize(14).fontColor('#999').margin({ top: 20 })
-        } else {
-          List({ space: 10 }) {
-            ForEach(this.devices, (device: DeviceInfo) => {
-              ListItem() {
-                Row() {
-                  // 状态灯
-                  Circle()
-                    .width(10).height(10)
-                    .fill(device.online ? '#4CAF50' : '#BDBDBD')
-
-                  Column() {
-                    Text(device.name || device.device_id)
-                      .fontSize(15).fontWeight(FontWeight.Medium).fontColor('#333')
-                    Text(device.location || '--')
-                      .fontSize(11).fontColor('#999').margin({ top: 2 })
-                  }
-                  .alignItems(HorizontalAlign.Start)
-                  .margin({ left: 10 })
-
-                  Blank()
-
-                  Column() {
-                    Text(`${device.last_telemetry.temp.toFixed(1)}℃`)
-                      .fontSize(15).fontWeight(FontWeight.Bold)
-                      .fontColor(this.getTempColor(device.last_telemetry.temp))
-                    Text(`${device.last_telemetry.humi.toFixed(1)}%`)
-                      .fontSize(11).fontColor('#2196F3').margin({ top: 2 })
-                  }
-                  .alignItems(HorizontalAlign.End)
-                  .margin({ right: 12 })
-
-                  if (device.last_telemetry.alarm === 1) {
-                    Text('⚠️').fontSize(16)
-                  }
-                }
-                .width('100%')
-                .padding(14)
-                .backgroundColor('#FFFFFF')
-                .borderRadius(10)
+        Scroll() {
+          Column({ space: 12 }) {
+            // ====== 设备信息条 ======
+            Row() {
+              Circle().width(10).height(10).fill(this.deviceOnline ? '#4CAF50' : '#BDBDBD')
+              Text(this.deviceName)
+                .fontSize(15).fontWeight(FontWeight.Bold).fontColor('#333').margin({ left: 8 })
+              Blank()
+              Text(this.deviceOnline ? '🟢 在线' : '⚫ 离线')
+                .fontSize(12).fontColor(this.deviceOnline ? '#4CAF50' : '#999')
+              if (this.deviceLocation !== '') {
+                Text(` 📍 ${this.deviceLocation}`)
+                  .fontSize(12).fontColor('#999').margin({ left: 8 })
               }
-            })
+            }
+            .width('100%').padding(14)
+            .backgroundColor('#FFFFFF').borderRadius(12)
+            .shadow({ radius: 4, color: '#00000008', offsetY: 2 })
+
+            // ====== 四宫格指标卡片 ======
+            Row({ space: 8 }) {
+              this.MetricCard('🌡️ 温度', `${this.temp.toFixed(1)}℃`, this.getTempColor(this.temp))
+              this.MetricCard('💧 湿度', `${this.humi.toFixed(1)}%`, this.getHumiColor(this.humi))
+            }.width('100%')
+
+            Row({ space: 8 }) {
+              this.MetricCard('💡 光照', `${this.lux.toFixed(0)} lx`, this.getLuxColor(this.lux))
+              this.MetricCard('📐 倾斜', `${this.tilt.toFixed(0)}`, this.getTiltColor(this.tilt))
+            }.width('100%')
+
+            // ====== 告警 ======
+            if (this.alarm === 1) {
+              Row() {
+                Text('⚠️').fontSize(16)
+                Text(`告警: ${this.alarmReason}`)
+                  .fontSize(14).fontColor('#F44336').margin({ left: 8 })
+              }
+              .width('100%').padding(14)
+              .backgroundColor('#FFF3F0').borderRadius(10)
+            }
+
+            // ====== 实时曲线 ======
+            Text('实时曲线')
+              .fontSize(16).fontWeight(FontWeight.Bold).fontColor('#333')
+              .width('100%').margin({ top: 4 })
+
+            LineChart({ data: this.chartData })
+
+            Column().height(16)
           }
-          .layoutWeight(1)
-          .scrollBar(BarState.Off)
+          .width('100%')
         }
+        .width('100%').layoutWeight(1).scrollBar(BarState.Off)
       }
     }
-    .width('100%')
-    .height('100%')
-    .backgroundColor('#F5F5F5')
+    .width('100%').height('100%').backgroundColor('#F5F5F5')
     .padding({ left: 16, right: 16 })
   }
 
   @Builder
-  StatCard(label: string, value: string, color: string) {
+  MetricCard(label: string, value: string, color: string) {
     Column() {
       Text(label).fontSize(13).fontColor('#999')
-      Text(value).fontSize(32).fontWeight(FontWeight.Bold).fontColor(color).margin({ top: 6 })
+      Text(value).fontSize(26).fontWeight(FontWeight.Bold).fontColor(color).margin({ top: 4 })
     }
-    .width('100%').height('100%')
-    .justifyContent(FlexAlign.Center)
-    .backgroundColor('#FFFFFF')
-    .borderRadius(12)
+    .width('100%').height(90).justifyContent(FlexAlign.Center)
+    .backgroundColor('#FFFFFF').borderRadius(12)
     .shadow({ radius: 4, color: '#00000008', offsetY: 2 })
   }
 }

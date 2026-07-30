@@ -1,61 +1,107 @@
 /**
- * 折线图组件 — 基于 ArkUI Canvas 绘制
+ * 实时多线面积图 — 温度/湿度/光照三条线合一
  *
- * 支持三条折线：温度(红)、湿度(蓝)、光照(橙)。
- * 网格 + 坐标轴 + 数据点 + 图例。
+ * - 每收到新数据追加到尾部，自动滚动，保留最近 60 个采样点
+ * - Y 轴随数据动态缩放，使变化明显
+ * - 触摸 / 鼠标悬停显示十字准星 + 数值浮层
  */
 
-import { TelemetryData } from '../services/ApiService';
+class Point {
+  x: number;
+  y: number;
 
-// 图表常量
-const PAD_L = 44;
-const PAD_T = 12;
-const PAD_R = 12;
-const PAD_B = 28;
-const C_GRID = '#E8E8E8';
-const C_AXIS = '#999';
-const C_T = '#F44336';
-const C_H = '#2196F3';
-const C_L = '#FF9800';
+  constructor(x: number, y: number) {
+    this.x = x;
+    this.y = y;
+  }
+}
+
+export class ChartData {
+  time: string;
+  temp: number;
+  humi: number;
+  lux: number;
+
+  constructor(time: string, temp: number, humi: number, lux: number) {
+    this.time = time;
+    this.temp = temp;
+    this.humi = humi;
+    this.lux = lux;
+  }
+}
+
+const PAD_L = 48, PAD_T = 10, PAD_R = 14, PAD_B = 28;
+const C_GRID = '#EEEEEE', C_AXIS = '#999';
+const C_TEMP = '#F44336', C_HUMI = '#2196F3', C_LUX = '#FF9800';
+const F_TEMP = '#FFCDD2', F_HUMI = '#BBDEFB', F_LUX = '#FFE0B2';
+const C_CROSS = '#666';       // 十字准星颜色
 
 @Component
 export struct LineChart {
-  @Prop data: TelemetryData[];
-  @Prop showTemp: boolean;
-  @Prop showHumi: boolean;
-  @Prop showLux: boolean;
-  @State canvasW: number = 300;
-  @State canvasH: number = 260;
+  @Prop data: ChartData[];
+  @State canvasW: number = 320;
+  @State canvasH: number = 280;
+
+  // ------ 触摸状态 ------
+  @State touchActive: boolean = false;
+  @State touchIdx: number = -1;
+  @State touchX: number = 0;
+  @State touchY: number = 0;
 
   private settings: RenderingContextSettings = new RenderingContextSettings(true);
   private ctx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.settings);
 
+  // ------ 动态 Y 轴范围（带 padding）------
+  private tempMin: number = 0;   private tempMax: number = 45;
+  private humiMin: number = 0;   private humiMax: number = 100;
+  private luxMin: number = 0;    private luxMax: number = 1000;
+
   build() {
-    Column() {
+    Column({ space: 6 }) {
       // 图例
-      if (this.showTemp || this.showHumi || this.showLux) {
-        Row({ space: 16 }) {
-          if (this.showTemp) { this.Dot('温度 ℃', C_T) }
-          if (this.showHumi) { this.Dot('湿度 %', C_H) }
-          if (this.showLux) { this.Dot('光照 LUX', C_L) }
+      Row({ space: 16 }) {
+        this.Dot('温度', C_TEMP)
+        this.Dot('湿度', C_HUMI)
+        this.Dot('光照', C_LUX)
+      }
+      .width('100%').padding({ left: 8 })
+
+      // 触摸提示行 — 大字体显示具体数值
+      if (this.touchActive && this.touchIdx >= 0 && this.touchIdx < this.data.length) {
+        Row({ space: 10 }) {
+          Text(this.data[this.touchIdx].time).fontSize(14).fontColor('#333').fontWeight(FontWeight.Bold)
+          Text(`🌡 ${this.data[this.touchIdx].temp.toFixed(1)}℃`).fontSize(14).fontColor(C_TEMP).fontWeight(FontWeight.Bold)
+          Text(`💧 ${this.data[this.touchIdx].humi.toFixed(1)}%`).fontSize(14).fontColor(C_HUMI).fontWeight(FontWeight.Bold)
+          Text(`💡 ${this.data[this.touchIdx].lux.toFixed(0)} lx`).fontSize(14).fontColor(C_LUX).fontWeight(FontWeight.Bold)
         }
-        .width('100%')
-        .padding({ left: 8, bottom: 4 })
+        .width('100%').padding({ left: 8, top: 4, bottom: 4 })
+        .backgroundColor('#F0F0F0').borderRadius(6)
       }
 
-      // Canvas
       Canvas(this.ctx)
         .width('100%')
         .height(this.canvasH)
         .backgroundColor('#FAFAFA')
         .borderRadius(8)
-        .onReady(() => {
-          this.render();
-        })
-        .onAreaChange((old, nu) => {
+        .onReady(() => { this.render(); })
+        .onAreaChange((_old, nu) => {
           this.canvasW = nu.width as number;
           this.canvasH = nu.height as number;
           this.render();
+        })
+        .onTouch((event: TouchEvent) => {
+          if (event.type === TouchType.Down || event.type === TouchType.Move) {
+            let touch = event.touches[0];
+            this.touchX = touch.x;
+            this.touchY = touch.y;
+            this.updateTouchIndex();
+            this.touchActive = true;
+            this.render();
+          } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+            this.touchActive = false;
+            this.touchIdx = -1;
+            this.render();
+          }
         })
     }
     .width('100%')
@@ -72,21 +118,74 @@ export struct LineChart {
     }
   }
 
-  // ============================================================
-  // Canvas 绘制逻辑
-  // ============================================================
-  private render(): void {
-    let c = this.ctx;
+  // ------ 根据触摸 X 坐标推算最近的数据点 ------
+  private updateTouchIndex(): void {
     let n = this.data.length;
-    let W = this.canvasW;
-    let H = this.canvasH;
+    if (n < 2) {
+      this.touchIdx = -1;
+      return;
+    }
+    let l = PAD_L, r = this.canvasW - PAD_R;
+    let pw = r - l;
+    let idx = Math.round(((this.touchX - l) / pw) * (n - 1));
+    if (idx < 0) { idx = 0; }
+    if (idx >= n) { idx = n - 1; }
+    this.touchIdx = idx;
+  }
 
-    // 清除画布
+  // ------ 计算动态 Y 轴范围（加 20% padding）------
+  private calcRanges(): void {
+    let n = this.data.length;
+    if (n === 0) { return; }
+
+    // 温度范围
+    let temps = this.data.map(d => d.temp).filter(v => !isNaN(v));
+    if (temps.length > 0) {
+      let tMin = Math.min(...temps);
+      let tMax = Math.max(...temps);
+      let tPad = Math.max((tMax - tMin) * 0.2, 1);
+      this.tempMin = Math.floor(tMin - tPad);
+      this.tempMax = Math.ceil(tMax + tPad);
+      if (this.tempMin === this.tempMax) { this.tempMax = this.tempMin + 2; }
+    }
+
+    // 湿度范围
+    let humis = this.data.map(d => d.humi).filter(v => !isNaN(v));
+    if (humis.length > 0) {
+      let hMin = Math.min(...humis);
+      let hMax = Math.max(...humis);
+      let hPad = Math.max((hMax - hMin) * 0.2, 5);
+      this.humiMin = Math.floor(hMin - hPad);
+      this.humiMax = Math.ceil(hMax + hPad);
+      if (this.humiMin < 0) { this.humiMin = 0; }
+      if (this.humiMax > 100) { this.humiMax = 100; }
+      if (this.humiMin === this.humiMax) { this.humiMax = this.humiMin + 10; }
+    }
+
+    // 光照范围
+    let luxes = this.data.map(d => d.lux).filter(v => !isNaN(v));
+    if (luxes.length > 0) {
+      let lMin = Math.min(...luxes);
+      let lMax = Math.max(...luxes);
+      let lPad = Math.max((lMax - lMin) * 0.2, 20);
+      this.luxMin = Math.floor(lMin - lPad);
+      this.luxMax = Math.ceil(lMax + lPad);
+      if (this.luxMin < 0) { this.luxMin = 0; }
+      if (this.luxMin === this.luxMax) { this.luxMax = this.luxMin + 50; }
+    }
+  }
+
+  private render(): void {
+    this.calcRanges();
+
+    let c = this.ctx;
+    let W = this.canvasW, H = this.canvasH;
+    let n = this.data.length;
+
     c.clearRect(0, 0, W, H);
     if (n < 2 || W < 100) {
-      c.font = '12px sans-serif';
-      c.fillStyle = '#999';
-      c.fillText('数据不足', 60, H / 2);
+      c.font = '13px sans-serif'; c.fillStyle = '#999';
+      c.fillText('等待实时数据...', W / 2 - 40, H / 2);
       return;
     }
 
@@ -94,90 +193,140 @@ export struct LineChart {
     let pw = r - l, ph = b - t;
 
     // ---- 网格 ----
-    c.strokeStyle = C_GRID;
-    c.lineWidth = 0.5;
+    c.strokeStyle = C_GRID; c.lineWidth = 0.5;
     for (let i = 0; i <= 4; i++) {
       let y = t + (ph / 4) * i;
       c.beginPath(); c.moveTo(l, y); c.lineTo(r, y); c.stroke();
     }
-    for (let i = 0; i <= 6; i++) {
-      let x = l + (pw / 6) * i;
-      c.beginPath(); c.moveTo(x, t); c.lineTo(x, b); c.stroke();
-    }
 
-    // ---- Y 刻度 ----
-    c.font = '10px sans-serif';
-    c.fillStyle = C_AXIS;
+    // ---- Y 轴刻度（左侧温度，右侧湿度） ----
+    c.font = '10px sans-serif'; c.fillStyle = C_TEMP;
     for (let i = 0; i <= 4; i++) {
       let y = t + (ph / 4) * i;
-      let val = 45 - ((45 - 15) / 4) * i;
-      c.fillText(String(val.toFixed(0)), l - 4, y + 4);
+      let val = this.tempMax - ((this.tempMax - this.tempMin) / 4) * i;
+      c.fillText(val.toFixed(1) + '°', 2, y + 3);
     }
 
-    // ---- X 时间标签 ----
-    let ix = [0, Math.floor((n - 1) / 3), Math.floor((n - 1) * 2 / 3), n - 1];
-    for (let idx of ix) {
-      let x = l + (pw / (n - 1)) * idx;
-      let label = this.hourLabel(idx);
-      c.fillText(label, x, b + 14);
+    // 湿度右轴
+    c.fillStyle = C_HUMI;
+    for (let i = 0; i <= 4; i++) {
+      let y = t + (ph / 4) * i;
+      let val = this.humiMax - ((this.humiMax - this.humiMin) / 4) * i;
+      c.fillText(val.toFixed(0) + '%', r + 2, y + 3);
     }
 
-    // ---- 三条折线 ----
-    if (this.showTemp) {
-      this.drawLine(c, 15, 45, C_T, n, l, t, pw, ph, (d: TelemetryData) => d.temp);
+    // ---- X 轴时间标签 ----
+    c.fillStyle = C_AXIS; c.font = '9px sans-serif';
+    let xIdx: number[] = [];
+    if (n <= 6) { for (let i = 0; i < n; i++) { xIdx.push(i); } }
+    else {
+      let step = Math.floor(n / 5);
+      for (let i = 0; i < n; i += step) { xIdx.push(i); }
+      if (xIdx[xIdx.length - 1] !== n - 1) { xIdx.push(n - 1); }
     }
-    if (this.showHumi) {
-      this.drawLine(c, 20, 100, C_H, n, l, t, pw, ph, (d: TelemetryData) => d.humi);
+    for (let idx of xIdx) {
+      let x = l + (pw / Math.max(n - 1, 1)) * idx;
+      c.fillText(this.data[idx].time, x - 10, b + 12);
     }
-    if (this.showLux) {
-      this.drawLine(c, 0, 1000, C_L, n, l, t, pw, ph, (d: TelemetryData) => d.lux);
+
+    // ---- 三条线 + 面积填充（各自动态 Y 范围） ----
+    this.drawArea(c, l, t, pw, ph, n, this.tempMin, this.tempMax, C_TEMP, F_TEMP, (d: ChartData) => d.temp);
+    this.drawArea(c, l, t, pw, ph, n, this.humiMin, this.humiMax, C_HUMI, F_HUMI, (d: ChartData) => d.humi);
+    this.drawArea(c, l, t, pw, ph, n, this.luxMin, this.luxMax, C_LUX, F_LUX, (d: ChartData) => d.lux);
+
+    // ---- 十字准星（触摸时） ----
+    if (this.touchActive && this.touchIdx >= 0 && this.touchIdx < n) {
+      let cx = l + (pw / Math.max(n - 1, 1)) * this.touchIdx;
+
+      // 垂直线
+      c.strokeStyle = C_CROSS; c.lineWidth = 1; c.setLineDash([4, 4]);
+      c.beginPath(); c.moveTo(cx, t); c.lineTo(cx, b); c.stroke();
+      c.setLineDash([]);
+
+      // 各数据点高亮圈
+      let d = this.data[this.touchIdx];
+      let drawPoint = (val: number, yMin: number, yMax: number, color: string) => {
+        if (val == null || isNaN(val)) { return; }
+        let py = t + ph - ((val - yMin) / (yMax - yMin)) * ph;
+        c.beginPath();
+        c.arc(cx, py, 6, 0, Math.PI * 2);
+        c.fillStyle = color; c.fill();
+        c.strokeStyle = '#FFFFFF'; c.lineWidth = 2; c.stroke();
+      };
+      drawPoint(d.temp, this.tempMin, this.tempMax, C_TEMP);
+      drawPoint(d.humi, this.humiMin, this.humiMax, C_HUMI);
+      drawPoint(d.lux, this.luxMin, this.luxMax, C_LUX);
+
+      // 浮层 — 加大字体
+      let tipW = 166, tipH = 44, tipX = cx + 10, tipY = t + 2;
+      if (tipX + tipW > r) { tipX = cx - tipW - 10; }
+      c.fillStyle = 'rgba(0,0,0,0.78)';
+      this.roundRect(c, tipX, tipY, tipW, tipH, 6);
+      c.fill();
+
+      c.font = 'bold 13px sans-serif'; c.fillStyle = '#FFF';
+      c.fillText(d.time, tipX + 8, tipY + 16);
+      c.font = '12px sans-serif';
+      c.fillText(`🌡 ${d.temp.toFixed(1)}℃`, tipX + 8, tipY + 32);
+      c.fillText(`💧 ${d.humi.toFixed(1)}%`, tipX + 84, tipY + 32);
+      c.fillText(`💡 ${d.lux.toFixed(0)} lx`, tipX + 8, tipY + 44);
     }
   }
 
-  private drawLine(
+  // 圆角矩形辅助
+  private roundRect(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.lineTo(x + w - r, y);
+    c.arcTo(x + w, y, x + w, y + r, r);
+    c.lineTo(x + w, y + h - r);
+    c.arcTo(x + w, y + h, x + w - r, y + h, r);
+    c.lineTo(x + r, y + h);
+    c.arcTo(x, y + h, x, y + h - r, r);
+    c.lineTo(x, y + r);
+    c.arcTo(x, y, x + r, y, r);
+    c.closePath();
+  }
+
+  private drawArea(
     c: CanvasRenderingContext2D,
-    yMin: number, yMax: number,
-    color: string,
-    n: number, l: number, t: number, pw: number, ph: number,
-    fn: (d: TelemetryData) => number
+    l: number, t: number, pw: number, ph: number, n: number,
+    yMin: number, yMax: number, color: string, fill: string,
+    fn: (d: ChartData) => number
   ): void {
-    // 收集点
-    let pts: number[][] = [];
+    let pts: Point[] = [];
     for (let i = 0; i < n; i++) {
-      let d = this.data[i];
-      let v = d ? fn(d) : NaN;
-      if (isNaN(v)) { continue; }
-      let x = l + (pw / (n - 1)) * i;
+      let v = fn(this.data[i]);
+      if (v == null || isNaN(v)) { continue; }
+      let x = l + (pw / Math.max(n - 1, 1)) * i;
       let y = t + ph - ((v - yMin) / (yMax - yMin)) * ph;
-      pts.push([x, y]);
+      pts.push(new Point(x, y));
     }
     if (pts.length < 2) { return; }
 
-    // 画线
-    c.strokeStyle = color;
-    c.lineWidth = 2;
-    c.lineJoin = 'round';
+    // 填充
     c.beginPath();
-    c.moveTo(pts[0][0], pts[0][1]);
-    for (let i = 1; i < pts.length; i++) {
-      c.lineTo(pts[i][0], pts[i][1]);
-    }
+    c.moveTo(pts[0].x, t + ph);
+    for (let p of pts) { c.lineTo(p.x, p.y); }
+    c.lineTo(pts[pts.length - 1].x, t + ph);
+    c.closePath();
+    c.fillStyle = fill;
+    c.fill();
+
+    // 线
+    c.strokeStyle = color; c.lineWidth = 2; c.lineJoin = 'round';
+    c.beginPath();
+    c.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) { c.lineTo(pts[i].x, pts[i].y); }
     c.stroke();
 
-    // 画点
-    let step = Math.max(1, Math.floor(pts.length / 12));
-    c.fillStyle = color;
+    // 点
+    let step = Math.max(1, Math.floor(pts.length / 10));
     for (let i = 0; i < pts.length; i += step) {
       c.beginPath();
-      c.arc(pts[i][0], pts[i][1], 2.5, 0, Math.PI * 2);
-      c.fill();
+      c.arc(pts[i].x, pts[i].y, 2.5, 0, Math.PI * 2);
+      c.fillStyle = color; c.fill();
+      c.strokeStyle = '#FFFFFF'; c.lineWidth = 1; c.stroke();
     }
-  }
-
-  private hourLabel(i: number): string {
-    let ts = this.data[i] ? this.data[i]._ts : 0;
-    if (!ts || ts <= 0) { return ''; }
-    let date = new Date(ts * 1000);
-    return `${date.getHours().toString().padStart(2, '0')}:00`;
   }
 }

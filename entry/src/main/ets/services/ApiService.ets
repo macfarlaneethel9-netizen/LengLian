@@ -140,6 +140,18 @@ class LoginBody {
   }
 }
 
+class CreateDeviceBody {
+  device_id: string;
+  name?: string;
+  location?: string;
+
+  constructor(deviceId: string, name?: string, location?: string) {
+    this.device_id = deviceId;
+    if (name) { this.name = name; }
+    if (location) { this.location = location; }
+  }
+}
+
 class RegisterBody {
   username: string;
   password: string;
@@ -280,6 +292,17 @@ class ApiService {
       `/devices/${deviceId}`
     );
     return JSON.parse(data) as DeviceInfo;
+  }
+
+  // 添加设备
+  async createDevice(deviceId: string, name?: string, location?: string): Promise<object> {
+    let body = new CreateDeviceBody(deviceId, name, location);
+    let data = await this.request(
+      http.RequestMethod.POST,
+      '/devices',
+      body
+    );
+    return JSON.parse(data);
   }
 
   // ----------------------------------------------------------
