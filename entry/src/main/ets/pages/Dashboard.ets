@@ -15,7 +15,7 @@ import {
 } from '../services/ApiService';
 import { realtimeService } from '../services/RealtimeService';
 
-const MAX_POINTS = 60;  // 最多保留 60 个采样点
+const MAX_POINTS = 28800;  // 3秒×28800点 = 24小时
 
 @Component
 export struct DashboardPage {
@@ -69,7 +69,7 @@ export struct DashboardPage {
       }
       this.updateTime();
     });
-    realtimeService.start(3000);
+    realtimeService.start(3000);  // 3秒一次
   }
 
   aboutToDisappear(): void {
@@ -170,11 +170,11 @@ export struct DashboardPage {
             // ====== 四宫格指标卡片 ======
             Row({ space: 8 }) {
               this.MetricCard('🌡️ 温度', `${this.temp.toFixed(1)}℃`, this.getTempColor(this.temp))
-              this.MetricCard('💧 湿度', `${this.humi.toFixed(1)}%`, this.getHumiColor(this.humi))
+              this.MetricCard('💡 光照', `${this.lux.toFixed(0)} lx`, this.getLuxColor(this.lux))
             }.width('100%')
 
             Row({ space: 8 }) {
-              this.MetricCard('💡 光照', `${this.lux.toFixed(0)} lx`, this.getLuxColor(this.lux))
+              this.MetricCard('💧 湿度', `${this.humi.toFixed(1)}%`, this.getHumiColor(this.humi))
               this.MetricCard('📐 倾斜', `${this.tilt.toFixed(0)}`, this.getTiltColor(this.tilt))
             }.width('100%')
 
@@ -210,8 +210,8 @@ export struct DashboardPage {
   @Builder
   MetricCard(label: string, value: string, color: string) {
     Column() {
-      Text(label).fontSize(13).fontColor('#999')
-      Text(value).fontSize(26).fontWeight(FontWeight.Bold).fontColor(color).margin({ top: 4 })
+      Text(label).fontSize(12).fontColor('#999')
+      Text(value).fontSize(24).fontWeight(FontWeight.Bold).fontColor(color).margin({ top: 4 })
     }
     .width('100%').height(90).justifyContent(FlexAlign.Center)
     .backgroundColor('#FFFFFF').borderRadius(12)

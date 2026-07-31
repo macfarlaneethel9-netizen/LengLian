@@ -20,6 +20,9 @@ export struct DeviceListPage {
   @State lastRefresh: string = '--:--:--';
   private isMounted: boolean = false;
 
+  // ---- 排序模式 ----
+  @State sortMode: boolean = false;
+
   // ---- 添加设备 ----
   @State showAdd: boolean = false;
   @State newId: string = '';
@@ -109,6 +112,25 @@ export struct DeviceListPage {
       `${now.getSeconds().toString().padStart(2,'0')}`;
   }
 
+  // ------ 拖拽排序 ------
+  moveUp(index: number): void {
+    if (index <= 0) { return; }
+    let arr = this.devices;
+    let tmp = arr[index - 1];
+    arr[index - 1] = arr[index];
+    arr[index] = tmp;
+    this.devices = arr;
+  }
+
+  moveDown(index: number): void {
+    if (index >= this.devices.length - 1) { return; }
+    let arr = this.devices;
+    let tmp = arr[index + 1];
+    arr[index + 1] = arr[index];
+    arr[index] = tmp;
+    this.devices = arr;
+  }
+
   getTempColor(t: number): string {
     if (t > 8) { return '#F44336'; }
     if (t < 2) { return '#FF9800'; }
@@ -135,7 +157,10 @@ export struct DeviceListPage {
           PageTitle('设备列表')
           Blank()
           Row() {
-            Text('➕').fontSize(20)
+            Text('🔀').fontSize(18)
+              .fontColor(this.sortMode ? '#1a73e8' : '#999')
+              .onClick(() => { this.sortMode = !this.sortMode; })
+            Text('➕').fontSize(20).margin({ left: 8 })
               .onClick(() => {
                 this.showAdd = true;
                 this.newId = ''; this.newName = ''; this.newLoc = '';
@@ -164,8 +189,8 @@ export struct DeviceListPage {
         }
         if (this.devices.length > 0) {
           List({ space: 12 }) {
-            ForEach(this.devices, (device: DeviceInfo) => {
-              ListItem() { this.DeviceCard(device) }
+            ForEach(this.devices, (device: DeviceInfo, index: number) => {
+              ListItem() { this.DeviceCard(device, index) }
             })
           }.width('100%').layoutWeight(1).scrollBar(BarState.Off).padding({ top: 8, bottom: 16 })
         }
@@ -218,11 +243,20 @@ export struct DeviceListPage {
   }
 
   @Builder
-  DeviceCard(device: DeviceInfo) {
+  DeviceCard(device: DeviceInfo, index: number) {
     Column({ space: 8 }) {
       Row() {
         Text(device.name || device.device_id).fontSize(16).fontWeight(FontWeight.Bold).fontColor('#333')
         Blank()
+        // 排序按钮
+        if (this.sortMode) {
+          Row({ space: 4 }) {
+            Text('▲').fontSize(16).fontColor(index > 0 ? '#1a73e8' : '#CCC')
+              .onClick(() => { this.moveUp(index); })
+            Text('▼').fontSize(16).fontColor(index < this.devices.length - 1 ? '#1a73e8' : '#CCC')
+              .onClick(() => { this.moveDown(index); })
+          }.margin({ right: 8 })
+        }
         Text(device.online ? '🟢 在线' : '⚫ 离线').fontSize(12)
           .fontColor(device.online ? '#4CAF50' : '#999')
       }.width('100%')

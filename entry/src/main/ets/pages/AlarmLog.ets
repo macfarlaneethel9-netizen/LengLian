@@ -24,9 +24,9 @@ export struct AlarmLogPage {
     this.isLoading = true;
     this.errorText = '';
     try {
-      let result = await apiService.getEvents(200, undefined, this.selectedKind);
-      this.events = result.events;
-      this.totalCount = result.events.length;
+      let result = await apiService.getEvents(500, undefined, this.selectedKind);
+      this.events = result.events || [];
+      this.totalCount = this.events.length;
     } catch (err) {
       this.errorText = '加载失败：' + String((err as Error).message || '未知错误');
     }

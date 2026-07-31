@@ -257,35 +257,7 @@ export struct LineChart {
       drawPoint(d.humi, this.humiMin, this.humiMax, C_HUMI);
       drawPoint(d.lux, this.luxMin, this.luxMax, C_LUX);
 
-      // 浮层 — 加大字体
-      let tipW = 166, tipH = 44, tipX = cx + 10, tipY = t + 2;
-      if (tipX + tipW > r) { tipX = cx - tipW - 10; }
-      c.fillStyle = 'rgba(0,0,0,0.78)';
-      this.roundRect(c, tipX, tipY, tipW, tipH, 6);
-      c.fill();
-
-      c.font = 'bold 13px sans-serif'; c.fillStyle = '#FFF';
-      c.fillText(d.time, tipX + 8, tipY + 16);
-      c.font = '12px sans-serif';
-      c.fillText(`🌡 ${d.temp.toFixed(1)}℃`, tipX + 8, tipY + 32);
-      c.fillText(`💧 ${d.humi.toFixed(1)}%`, tipX + 84, tipY + 32);
-      c.fillText(`💡 ${d.lux.toFixed(0)} lx`, tipX + 8, tipY + 44);
     }
-  }
-
-  // 圆角矩形辅助
-  private roundRect(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
-    c.beginPath();
-    c.moveTo(x + r, y);
-    c.lineTo(x + w - r, y);
-    c.arcTo(x + w, y, x + w, y + r, r);
-    c.lineTo(x + w, y + h - r);
-    c.arcTo(x + w, y + h, x + w - r, y + h, r);
-    c.lineTo(x + r, y + h);
-    c.arcTo(x, y + h, x, y + h - r, r);
-    c.lineTo(x, y + r);
-    c.arcTo(x, y, x + r, y, r);
-    c.closePath();
   }
 
   private drawArea(
@@ -304,14 +276,16 @@ export struct LineChart {
     }
     if (pts.length < 2) { return; }
 
-    // 填充
+    // 填充（半透明，避免互相遮盖）
     c.beginPath();
     c.moveTo(pts[0].x, t + ph);
     for (let p of pts) { c.lineTo(p.x, p.y); }
     c.lineTo(pts[pts.length - 1].x, t + ph);
     c.closePath();
     c.fillStyle = fill;
+    c.globalAlpha = 0.3;
     c.fill();
+    c.globalAlpha = 1.0;
 
     // 线
     c.strokeStyle = color; c.lineWidth = 2; c.lineJoin = 'round';

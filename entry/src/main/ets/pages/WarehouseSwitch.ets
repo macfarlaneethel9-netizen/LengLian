@@ -30,85 +30,63 @@ import { PageTitle } from '../components/CommonBuilders';
 import { apiService, DeviceInfo } from '../services/ApiService';
 import { realtimeService } from '../services/RealtimeService';
 
-// ------ 命令体类型（ArkTS 要求显式声明）------
-class LedColor {
-  r: number;
-  g: number;
-  b: number;
+// ================================================================
+// 命令体类型 — 字段名对齐华为云 IoTDA 设备影子
+// ================================================================
+// light = 灯    motor = 门锁   ac  = 空调   auto = 自动模式
+// tm    = 温度阈值   hu   = 湿度阈值
+// lig   = 光照阈值   lncli = 倾斜阈值
+// de    = 清除告警   all  = 紧急全关
+// ================================================================
 
-  constructor(r: number, g: number, b: number) {
-    this.r = r;
-    this.g = g;
-    this.b = b;
-  }
-}
-
-class LedCmd {
-  led: LedColor;
-  constructor(on: boolean) {
-    this.led = on ? new LedColor(255, 255, 255) : new LedColor(0, 0, 0);
-  }
+class LightCmd {
+  light: number;
+  constructor(on: boolean) { this.light = on ? 1 : 0; }
 }
 
 class MotorCmd {
   motor: number;
-  constructor(open: boolean) {
-    this.motor = open ? 80 : 0;   // 80: 开锁脉冲, 0: 关锁
-  }
+  constructor(open: boolean) { this.motor = open ? 80 : 0; }
 }
 
-class ClearAlarmCmd {
-  clear_alarm: number;
-  constructor() { this.clear_alarm = 1; }
-}
-
-class EmergencyCmd {
-  motor: number;
-  led: LedColor;
-  beep: number;
-  constructor() {
-    this.motor = 0;
-    this.led = new LedColor(0, 0, 0);
-    this.beep = 0;
-  }
-}
-
-// ------ 新增命令体：空调 ------
 class AcCmd {
   ac: number;
   constructor(on: boolean) { this.ac = on ? 1 : 0; }
 }
 
-// ------ 新增命令体：温度阈值 ------
-class TempThresholdCmd {
-  temp_threshold_high: number;
-  temp_threshold_low: number;
-  constructor(high: number, low: number) {
-    this.temp_threshold_high = high;
-    this.temp_threshold_low = low;
-  }
+class AutoCmd {
+  auto: number;
+  constructor(on: boolean) { this.auto = on ? 1 : 0; }
 }
 
-// ------ 新增命令体：湿度阈值 ------
-class HumiThresholdCmd {
-  humi_threshold_high: number;
-  humi_threshold_low: number;
-  constructor(high: number, low: number) {
-    this.humi_threshold_high = high;
-    this.humi_threshold_low = low;
-  }
+class TmCmd {
+  tm: number;
+  constructor(on: boolean) { this.tm = on ? 1 : 0; }
 }
 
-// ------ 新增命令体：光照阈值 ------
-class LuxThresholdCmd {
-  lux_threshold: number;
-  constructor(v: number) { this.lux_threshold = v; }
+class HuCmd {
+  hu: number;
+  constructor(on: boolean) { this.hu = on ? 1 : 0; }
 }
 
-// ------ 新增命令体：倾斜阈值 ------
-class TiltThresholdCmd {
-  tilt_threshold: number;
-  constructor(v: number) { this.tilt_threshold = v; }
+class LigCmd {
+  lig: number;
+  constructor(on: boolean) { this.lig = on ? 1 : 0; }
+}
+
+class IncliCmd {
+  lncli: number;
+  constructor(on: boolean) { this.lncli = on ? 1 : 0; }
+}
+
+class ClearAlarmCmd {
+  de: number;
+  constructor() { this.de = 1; }
+}
+
+class EmergencyCmd {
+  all: number;
+  constructor() { this.all = 1; }
 }
 
 @Component
@@ -127,28 +105,14 @@ export struct WarehouseSwitchPage {
   // ------ 空调状态 ------
   @State acOn: boolean = false;
 
-  // ------ 温度阈值 ------
-  @StorageLink('tempThresholdHigh') tempThresholdHigh: number = 8;
-  @StorageLink('tempThresholdLow') tempThresholdLow: number = 2;
-  @State tempHighSlider: number = 8;
-  @State tempLowSlider: number = 2;
+  // ------ 自动模式 ------
+  @State autoOn: boolean = false;
 
-  // ------ 湿度阈值 ------
-  @StorageLink('humiThresholdHigh') humiThresholdHigh: number = 80;
-  @StorageLink('humiThresholdLow') humiThresholdLow: number = 20;
-  @State humiHighSlider: number = 80;
-  @State humiLowSlider: number = 20;
-
-  // ------ 光照阈值 ------
-  @StorageLink('luxThreshold') luxThreshold: number = 200;
-  @State luxSlider: number = 200;
-
-  // ------ 倾斜阈值 ------
-  @StorageLink('tiltThreshold') tiltThreshold: number = 15000;
-  @State tiltSlider: number = 15000;
-
-  // ------ 阈值面板折叠 ------
-  @State thresholdExpanded: boolean = false;
+  // ------ 阈值开关 ------
+  @State tmOn: boolean = true;
+  @State huOn: boolean = true;
+  @State ligOn: boolean = true;
+  @State incliOn: boolean = true;
 
   // ------ 反馈消息 ------
   @State okText: string = '';
@@ -158,21 +122,13 @@ export struct WarehouseSwitchPage {
   aboutToAppear(): void {
     this.fetchDevices();
 
-    // 同步滑块到 AppStorage 值
-    this.tempHighSlider = this.tempThresholdHigh;
-    this.tempLowSlider = this.tempThresholdLow;
-    this.humiHighSlider = this.humiThresholdHigh;
-    this.humiLowSlider = this.humiThresholdLow;
-    this.luxSlider = this.luxThreshold;
-    this.tiltSlider = this.tiltThreshold;
-
     // 订阅实时推送，保持设备列表和状态最新
     realtimeService.onUpdate((devices: DeviceInfo[]) => {
       this.devices = devices;
-      // 从最新遥测同步电机/灯光状态
-      if (this.devices.length > 0) {
-        let t = this.devices[this.selectedIndex].last_telemetry;
-        this.doorOpen = t.motor === 1;
+      // 从最新遥测同步电机状态
+      let d = this.curDevice();
+      if (d) {
+        this.doorOpen = d.last_telemetry.motor === 1;
       }
     });
     realtimeService.start(3000);
@@ -200,15 +156,67 @@ export struct WarehouseSwitchPage {
     this.isLoading = false;
   }
 
-  get selectedDevice(): DeviceInfo | null {
+  // ------ 安全取当前设备（避免 ?. 渲染问题）------
+  private curDevice(): DeviceInfo | null {
     if (this.devices.length === 0) { return null; }
+    if (this.selectedIndex < 0) { return null; }
+    if (this.selectedIndex >= this.devices.length) { return null; }
     return this.devices[this.selectedIndex];
+  }
+
+  curName(): string {
+    let d = this.curDevice();
+    if (d) {
+      if (d.name && d.name.length > 0) { return d.name; }
+      if (d.device_id && d.device_id.length > 0) { return d.device_id; }
+    }
+    return '--';
+  }
+
+  curId(): string {
+    let d = this.curDevice();
+    return (d && d.device_id) ? d.device_id : '--';
+  }
+
+  curLoc(): string {
+    let d = this.curDevice();
+    return (d && d.location) ? d.location : '';
+  }
+
+  curOnline(): boolean {
+    let d = this.curDevice();
+    return d ? d.online : false;
+  }
+
+  curTemp(): string {
+    let d = this.curDevice();
+    if (d && d.last_telemetry && typeof d.last_telemetry.temp === 'number') {
+      return d.last_telemetry.temp.toFixed(1);
+    }
+    return '--';
+  }
+
+  curHumi(): string {
+    let d = this.curDevice();
+    if (d && d.last_telemetry && typeof d.last_telemetry.humi === 'number') {
+      return d.last_telemetry.humi.toFixed(1);
+    }
+    return '--';
+  }
+
+  curLux(): string {
+    let d = this.curDevice();
+    if (d && d.last_telemetry && typeof d.last_telemetry.lux === 'number') {
+      return d.last_telemetry.lux.toFixed(0);
+    }
+    return '--';
   }
 
   // ------ 发送命令 ------
   async sendCommand(cmd: object, label: string): Promise<void> {
-    if (this.devices.length === 0) { return; }
-    let deviceId = this.devices[this.selectedIndex].device_id;
+    let d = this.curDevice();
+    if (!d) { return; }
+    let deviceId = d.device_id;
     this.sendingLabel = label;
     this.errorText = '';
     this.okText = '';
@@ -227,7 +235,7 @@ export struct WarehouseSwitchPage {
   // ------ 灯光开关 ------
   toggleLight(): void {
     this.lightOn = !this.lightOn;
-    this.sendCommand(new LedCmd(this.lightOn), this.lightOn ? '开灯' : '关灯');
+    this.sendCommand(new LightCmd(this.lightOn), this.lightOn ? '开灯' : '关灯');
   }
 
   // ------ 大门开关 ------
@@ -242,43 +250,12 @@ export struct WarehouseSwitchPage {
     this.sendCommand(new AcCmd(this.acOn), this.acOn ? '开空调' : '关空调');
   }
 
-  // ------ 发送温度阈值 ------
-  setTempThreshold(): void {
-    this.tempThresholdHigh = this.tempHighSlider;
-    this.tempThresholdLow = this.tempLowSlider;
-    this.sendCommand(
-      new TempThresholdCmd(this.tempHighSlider, this.tempLowSlider),
-      `温度阈值 ${this.tempLowSlider.toFixed(1)}~${this.tempHighSlider.toFixed(1)}℃`
-    );
+  // ------ 自动模式 ------
+  toggleAuto(): void {
+    this.autoOn = !this.autoOn;
+    this.sendCommand(new AutoCmd(this.autoOn), this.autoOn ? '开启自动模式' : '关闭自动模式');
   }
 
-  // ------ 发送湿度阈值 ------
-  setHumiThreshold(): void {
-    this.humiThresholdHigh = this.humiHighSlider;
-    this.humiThresholdLow = this.humiLowSlider;
-    this.sendCommand(
-      new HumiThresholdCmd(this.humiHighSlider, this.humiLowSlider),
-      `湿度阈值 ${this.humiLowSlider.toFixed(0)}~${this.humiHighSlider.toFixed(0)}%`
-    );
-  }
-
-  // ------ 发送光照阈值 ------
-  setLuxThreshold(): void {
-    this.luxThreshold = this.luxSlider;
-    this.sendCommand(
-      new LuxThresholdCmd(this.luxSlider),
-      `光照阈值 ${this.luxSlider.toFixed(0)} lx`
-    );
-  }
-
-  // ------ 发送倾斜阈值 ------
-  setTiltThreshold(): void {
-    this.tiltThreshold = this.tiltSlider;
-    this.sendCommand(
-      new TiltThresholdCmd(this.tiltSlider),
-      `倾斜阈值 ${this.tiltSlider.toFixed(0)}`
-    );
-  }
 
   build() {
     Column() {
@@ -291,22 +268,47 @@ export struct WarehouseSwitchPage {
       } else {
         Scroll() {
           Column({ space: 16 }) {
-            // ====== 设备选择器 ======
-            Row() {
-              Text('←').fontSize(24).fontColor('#1a73e8')
-                .onClick(() => { if (this.selectedIndex > 0) { this.selectedIndex--; } })
-              Column() {
-                Text(this.selectedDevice?.name || this.selectedDevice?.device_id || '--')
-                  .fontSize(16).fontWeight(FontWeight.Bold).fontColor('#333')
-                Text(`ID: ${this.selectedDevice?.device_id || ''}`)
-                  .fontSize(12).fontColor('#999').margin({ top: 2 })
+            // ====== 设备选择器（明确显示当前管理的设备） ======
+            Column() {
+              Row() {
+                Text('←').fontSize(28).fontColor(this.selectedIndex > 0 ? '#1a73e8' : '#CCC')
+                  .onClick(() => { if (this.selectedIndex > 0) { this.selectedIndex--; } })
+                Column() {
+                  Text('正在管理: ' + this.curName())
+                    .fontSize(15).fontWeight(FontWeight.Bold).fontColor('#333')
+                  Text('设备ID: ' + this.curId())
+                    .fontSize(12).fontColor('#666').margin({ top: 2 })
+                  if (this.curLoc() !== '') {
+                    Text('📍 ' + this.curLoc())
+                      .fontSize(11).fontColor('#999').margin({ top: 1 })
+                  }
+                }
+                .layoutWeight(1).alignItems(HorizontalAlign.Center)
+                Text('→').fontSize(28).fontColor(this.selectedIndex < this.devices.length - 1 ? '#1a73e8' : '#CCC')
+                  .onClick(() => { if (this.selectedIndex < this.devices.length - 1) { this.selectedIndex++; } })
+              }.width('100%')
+
+              // 当前设备实时数值
+              Row({ space: 12 }) {
+                Text((this.selectedIndex + 1) + '/' + this.devices.length)
+                  .fontSize(11).fontColor('#999')
+                Circle().width(8).height(8)
+                  .fill(this.curOnline() ? '#4CAF50' : '#BDBDBD')
+                Text(this.curOnline() ? '在线' : '离线')
+                  .fontSize(11).fontColor(this.curOnline() ? '#4CAF50' : '#999')
+                Text('|').fontSize(11).fontColor('#E0E0E0')
+                Text('🌡 ' + this.curTemp() + '℃')
+                  .fontSize(11).fontColor('#F44336')
+                Text('💧 ' + this.curHumi() + '%')
+                  .fontSize(11).fontColor('#2196F3')
+                Text('💡 ' + this.curLux() + ' lx')
+                  .fontSize(11).fontColor('#FF9800')
               }
-              .layoutWeight(1).alignItems(HorizontalAlign.Center)
-              Text('→').fontSize(24).fontColor('#1a73e8')
-                .onClick(() => { if (this.selectedIndex < this.devices.length - 1) { this.selectedIndex++; } })
+              .width('100%').margin({ top: 8 })
             }
-            .width('100%').padding(14).backgroundColor('#FFFFFF')
-            .borderRadius(12).margin({ bottom: 0 })
+            .width('100%').padding(14)
+            .backgroundColor('#FFFFFF').borderRadius(12)
+            .shadow({ radius: 4, color: '#00000008', offsetY: 2 })
 
             // ====== 反馈消息 ======
             if (this.okText !== '') {
@@ -348,7 +350,7 @@ export struct WarehouseSwitchPage {
                   .selectedColor('#FF9800')
                   .onChange((isOn: boolean) => {
                     this.lightOn = isOn;
-                    this.sendCommand(new LedCmd(isOn), isOn ? '开灯' : '关灯');
+                    this.sendCommand(new LightCmd(isOn), isOn ? '开灯' : '关灯');
                   })
               }
               .layoutWeight(1).alignItems(HorizontalAlign.End)
@@ -442,175 +444,126 @@ export struct WarehouseSwitchPage {
             .backgroundColor('#FFFFFF').borderRadius(16)
             .shadow({ radius: 6, color: '#0000000A', offsetY: 3 })
 
-            // ================================================================
-            // 阈值设置面板（可折叠）
-            // ================================================================
-            Column() {
-              Row() {
-                Text('⚙️ 告警阈值设置')
+            // ---- 自动模式 ----
+            Row() {
+              Column() {
+                Text('🤖')
+                  .fontSize(48)
+                Text('自动模式')
                   .fontSize(16).fontWeight(FontWeight.Bold).fontColor('#333')
-                Blank()
-                Text(this.thresholdExpanded ? '收起 ▲' : '展开 ▼')
-                  .fontSize(12).fontColor('#1a73e8')
+                  .margin({ top: 4 })
+                Text(this.autoOn ? '已开启' : '已关闭')
+                  .fontSize(13).fontColor(this.autoOn ? '#9C27B0' : '#999')
+                  .margin({ top: 2 })
               }
-              .width('100%')
-              .onClick(() => { this.thresholdExpanded = !this.thresholdExpanded; })
+              .alignItems(HorizontalAlign.Center)
+              .width(100)
 
-              if (this.thresholdExpanded) {
-                Column({ space: 14 }) {
-                  Divider().color('#E0E0E0').margin({ top: 8 })
+              Column() {
+                Text('根据阈值自动控制灯光/空调/门锁')
+                  .fontSize(12).fontColor('#999')
+                  .margin({ bottom: 10 })
 
-                  // ---- 温度阈值 ----
-                  Text('🌡️ 温度告警阈值')
-                    .fontSize(14).fontWeight(FontWeight.Medium).fontColor('#333')
-                    .width('100%')
+                Toggle({ type: ToggleType.Switch, isOn: this.autoOn })
+                  .selectedColor('#9C27B0')
+                  .onChange((isOn: boolean) => {
+                    this.autoOn = isOn;
+                    this.sendCommand(new AutoCmd(isOn), isOn ? '开启自动模式' : '关闭自动模式');
+                  })
+              }
+              .layoutWeight(1).alignItems(HorizontalAlign.End)
+            }
+            .width('100%').padding(20)
+            .backgroundColor('#FFFFFF').borderRadius(16)
+            .shadow({ radius: 6, color: '#0000000A', offsetY: 3 })
 
-                  Row({ space: 8 }) {
-                    Text(`${this.tempLowSlider.toFixed(1)}`).fontSize(12).fontColor('#FF9800').width(36)
-                    Slider({
-                      value: this.tempLowSlider,
-                      min: -10,
-                      max: 20,
-                      step: 0.5,
-                      style: SliderStyle.InSet
-                    })
-                      .layoutWeight(1)
-                      .blockColor('#FF9800')
-                      .trackColor('#FFE0B2')
-                      .selectedColor('#FF9800')
-                      .onChange((value: number) => { this.tempLowSlider = value; })
-                    Text('下限').fontSize(11).fontColor('#999').width(28)
-                  }.width('100%')
-
-                  Row({ space: 8 }) {
-                    Text(`${this.tempHighSlider.toFixed(1)}`).fontSize(12).fontColor('#F44336').width(36)
-                    Slider({
-                      value: this.tempHighSlider,
-                      min: -10,
-                      max: 20,
-                      step: 0.5,
-                      style: SliderStyle.InSet
-                    })
-                      .layoutWeight(1)
-                      .blockColor('#F44336')
-                      .trackColor('#FFCDD2')
-                      .selectedColor('#F44336')
-                      .onChange((value: number) => { this.tempHighSlider = value; })
-                    Text('上限').fontSize(11).fontColor('#999').width(28)
-                  }.width('100%')
-
-                  Button('设定温度阈值')
-                    .fontSize(13).height(36)
-                    .backgroundColor('#F44336').fontColor('#FFFFFF').borderRadius(18)
-                    .onClick(() => { this.setTempThreshold(); })
-
-                  Divider().color('#E0E0E0')
-
-                  // ---- 湿度阈值 ----
-                  Text('💧 湿度告警阈值')
-                    .fontSize(14).fontWeight(FontWeight.Medium).fontColor('#333')
-                    .width('100%')
-
-                  Row({ space: 8 }) {
-                    Text(`${this.humiLowSlider.toFixed(0)}`).fontSize(12).fontColor('#F44336').width(36)
-                    Slider({
-                      value: this.humiLowSlider,
-                      min: 0,
-                      max: 100,
-                      step: 5,
-                      style: SliderStyle.InSet
-                    })
-                      .layoutWeight(1)
-                      .blockColor('#F44336')
-                      .trackColor('#FFCDD2')
-                      .selectedColor('#F44336')
-                      .onChange((value: number) => { this.humiLowSlider = value; })
-                    Text('下限').fontSize(11).fontColor('#999').width(28)
-                  }.width('100%')
-
-                  Row({ space: 8 }) {
-                    Text(`${this.humiHighSlider.toFixed(0)}`).fontSize(12).fontColor('#FF9800').width(36)
-                    Slider({
-                      value: this.humiHighSlider,
-                      min: 0,
-                      max: 100,
-                      step: 5,
-                      style: SliderStyle.InSet
-                    })
-                      .layoutWeight(1)
-                      .blockColor('#FF9800')
-                      .trackColor('#FFE0B2')
-                      .selectedColor('#FF9800')
-                      .onChange((value: number) => { this.humiHighSlider = value; })
-                    Text('上限').fontSize(11).fontColor('#999').width(28)
-                  }.width('100%')
-
-                  Button('设定湿度阈值')
-                    .fontSize(13).height(36)
-                    .backgroundColor('#2196F3').fontColor('#FFFFFF').borderRadius(18)
-                    .onClick(() => { this.setHumiThreshold(); })
-
-                  Divider().color('#E0E0E0')
-
-                  // ---- 光照阈值 ----
-                  Text('💡 光照告警阈值')
-                    .fontSize(14).fontWeight(FontWeight.Medium).fontColor('#333')
-                    .width('100%')
-
-                  Row({ space: 8 }) {
-                    Text(`${this.luxSlider.toFixed(0)}`).fontSize(12).fontColor('#FF9800').width(36)
-                    Slider({
-                      value: this.luxSlider,
-                      min: 0,
-                      max: 1000,
-                      step: 10,
-                      style: SliderStyle.InSet
-                    })
-                      .layoutWeight(1)
-                      .blockColor('#FF9800')
-                      .trackColor('#FFE0B2')
-                      .selectedColor('#FF9800')
-                      .onChange((value: number) => { this.luxSlider = value; })
-                    Text('上限').fontSize(11).fontColor('#999').width(28)
-                  }.width('100%')
-
-                  Button('设定光照阈值')
-                    .fontSize(13).height(36)
-                    .backgroundColor('#FF9800').fontColor('#FFFFFF').borderRadius(18)
-                    .onClick(() => { this.setLuxThreshold(); })
-
-                  Divider().color('#E0E0E0')
-
-                  // ---- 倾斜阈值 ----
-                  Text('📐 倾斜告警阈值')
-                    .fontSize(14).fontWeight(FontWeight.Medium).fontColor('#333')
-                    .width('100%')
-
-                  Row({ space: 8 }) {
-                    Text(`${this.tiltSlider.toFixed(0)}`).fontSize(12).fontColor('#607D8B').width(48)
-                    Slider({
-                      value: this.tiltSlider,
-                      min: 0,
-                      max: 30000,
-                      step: 500,
-                      style: SliderStyle.InSet
-                    })
-                      .layoutWeight(1)
-                      .blockColor('#607D8B')
-                      .trackColor('#E0E0E0')
-                      .selectedColor('#607D8B')
-                      .onChange((value: number) => { this.tiltSlider = value; })
-                    Text('上限').fontSize(11).fontColor('#999').width(28)
-                  }.width('100%')
-
-                  Button('设定倾斜阈值')
-                    .fontSize(13).height(36)
-                    .backgroundColor('#607D8B').fontColor('#FFFFFF').borderRadius(18)
-                    .onClick(() => { this.setTiltThreshold(); })
-                }
+            // ================================================================
+            // 告警阈值开关
+            // ================================================================
+            Column({ space: 10 }) {
+              Text('⚙️ 告警阈值开关')
+                .fontSize(15).fontWeight(FontWeight.Bold).fontColor('#333')
                 .width('100%')
-                .margin({ top: 4 })
-              }
+
+              // 🌡️ 温度告警
+              Row() {
+                Text(this.tmOn ? ' ON ' : 'OFF')
+                  .fontSize(11).fontWeight(FontWeight.Bold)
+                  .fontColor(this.tmOn ? '#FFFFFF' : '#999')
+                  .backgroundColor(this.tmOn ? '#F44336' : '#E0E0E0')
+                  .borderRadius(4)
+                  .padding({ left: 4, right: 4, top: 2, bottom: 2 })
+                  .margin({ right: 10 })
+                Text('🌡️').fontSize(18)
+                Column() {
+                  Text('温度告警').fontSize(14).fontWeight(FontWeight.Medium).fontColor('#333')
+                  Text(this.tmOn ? '-2℃ ~ 8℃' : '-20℃ ~ 60℃').fontSize(11).fontColor('#999')
+                }
+                .layoutWeight(1).alignItems(HorizontalAlign.Start).margin({ left: 6 })
+                Toggle({ type: ToggleType.Switch, isOn: this.tmOn })
+                  .selectedColor('#F44336')
+                  .onChange((isOn: boolean) => { this.tmOn = isOn; this.sendCommand(new TmCmd(isOn), isOn ? '温度告警已开启' : '温度告警已关闭'); })
+              }.width('100%')
+
+              // 💧 湿度告警
+              Row() {
+                Text(this.huOn ? ' ON ' : 'OFF')
+                  .fontSize(11).fontWeight(FontWeight.Bold)
+                  .fontColor(this.huOn ? '#FFFFFF' : '#999')
+                  .backgroundColor(this.huOn ? '#2196F3' : '#E0E0E0')
+                  .borderRadius(4)
+                  .padding({ left: 4, right: 4, top: 2, bottom: 2 })
+                  .margin({ right: 10 })
+                Text('💧').fontSize(18)
+                Column() {
+                  Text('湿度告警').fontSize(14).fontWeight(FontWeight.Medium).fontColor('#333')
+                  Text(this.huOn ? '20% ~ 80%' : '0% ~ 100%').fontSize(11).fontColor('#999')
+                }
+                .layoutWeight(1).alignItems(HorizontalAlign.Start).margin({ left: 6 })
+                Toggle({ type: ToggleType.Switch, isOn: this.huOn })
+                  .selectedColor('#2196F3')
+                  .onChange((isOn: boolean) => { this.huOn = isOn; this.sendCommand(new HuCmd(isOn), isOn ? '湿度告警已开启' : '湿度告警已关闭'); })
+              }.width('100%')
+
+              // 💡 光照告警
+              Row() {
+                Text(this.ligOn ? ' ON ' : 'OFF')
+                  .fontSize(11).fontWeight(FontWeight.Bold)
+                  .fontColor(this.ligOn ? '#FFFFFF' : '#999')
+                  .backgroundColor(this.ligOn ? '#FF9800' : '#E0E0E0')
+                  .borderRadius(4)
+                  .padding({ left: 4, right: 4, top: 2, bottom: 2 })
+                  .margin({ right: 10 })
+                Text('💡').fontSize(18)
+                Column() {
+                  Text('光照告警').fontSize(14).fontWeight(FontWeight.Medium).fontColor('#333')
+                  Text(this.ligOn ? '0 ~ 200 lx' : '0 ~ 5000 lx').fontSize(11).fontColor('#999')
+                }
+                .layoutWeight(1).alignItems(HorizontalAlign.Start).margin({ left: 6 })
+                Toggle({ type: ToggleType.Switch, isOn: this.ligOn })
+                  .selectedColor('#FF9800')
+                  .onChange((isOn: boolean) => { this.ligOn = isOn; this.sendCommand(new LigCmd(isOn), isOn ? '光照告警已开启' : '光照告警已关闭'); })
+              }.width('100%')
+
+              // 📐 倾斜告警
+              Row() {
+                Text(this.incliOn ? ' ON ' : 'OFF')
+                  .fontSize(11).fontWeight(FontWeight.Bold)
+                  .fontColor(this.incliOn ? '#FFFFFF' : '#999')
+                  .backgroundColor(this.incliOn ? '#607D8B' : '#E0E0E0')
+                  .borderRadius(4)
+                  .padding({ left: 4, right: 4, top: 2, bottom: 2 })
+                  .margin({ right: 10 })
+                Text('📐').fontSize(18)
+                Column() {
+                  Text('倾斜告警').fontSize(14).fontWeight(FontWeight.Medium).fontColor('#333')
+                  Text(this.incliOn ? '0 ~ 15000' : '0 ~ 30000').fontSize(11).fontColor('#999')
+                }
+                .layoutWeight(1).alignItems(HorizontalAlign.Start).margin({ left: 6 })
+                Toggle({ type: ToggleType.Switch, isOn: this.incliOn })
+                  .selectedColor('#607D8B')
+                  .onChange((isOn: boolean) => { this.incliOn = isOn; this.sendCommand(new IncliCmd(isOn), isOn ? '倾斜告警已开启' : '倾斜告警已关闭'); })
+              }.width('100%')
             }
             .width('100%').padding(20)
             .backgroundColor('#FFFFFF').borderRadius(16)
@@ -638,6 +591,7 @@ export struct WarehouseSwitchPage {
                   this.lightOn = false;
                   this.doorOpen = false;
                   this.acOn = false;
+                  this.autoOn = false;
                   this.sendCommand(new EmergencyCmd(), '紧急全关');
                 })
             }
@@ -656,4 +610,5 @@ export struct WarehouseSwitchPage {
     .backgroundColor('#F5F5F5')
     .padding({ left: 16, right: 16 })
   }
+
 }
