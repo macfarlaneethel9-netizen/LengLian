@@ -231,10 +231,30 @@ class ApiService {
         `[ApiService] <-- ${http.RequestMethod[method]} ${path} | ${elapsed}ms | len=${bodyStr.length} | preview=${preview}`
       );
 
+      // HTTP 401/4xx 不能继续按成功响应解析，否则登录错误响应没有 token，
+      // 后续读取 token.length/substring 会变成“undefined”异常。
+      if (resp.responseCode < 200 || resp.responseCode >= 300) {
+        let detail = bodyStr;
+        try {
+          let errorBody = JSON.parse(bodyStr) as Record<string, string>;
+          if (errorBody['detail']) {
+            detail = errorBody['detail'];
+          }
+        } catch (_) {
+          // 保留原始响应文本
+        }
+        httpRequest.destroy();
+        throw new Error(`HTTP ${resp.responseCode}: ${detail}`);
+      }
+
       httpRequest.destroy();
       return bodyStr;
     } catch (err) {
       httpRequest.destroy();
+      let message = String((err as Error).message || '');
+      if (message.startsWith('HTTP ')) {
+        throw new Error(message);
+      }
       console.error(
         `[ApiService] ERR ${http.RequestMethod[method]} ${path} | ${JSON.stringify(err)}`
       );
@@ -250,6 +270,9 @@ class ApiService {
     let body = new LoginBody(username, password);
     let data = await this.request(http.RequestMethod.POST, '/auth/login', body);
     let result = JSON.parse(data) as LoginResult;
+    if (!result.token || !result.user) {
+      throw new Error('HTTP 401: Invalid username or password');
+    }
     this.token = result.token;
     this.currentUser = result.user;
     console.info(`[ApiService] 登录成功 | user=${result.user.username} | token=${this.token.substring(0, 20)}...`);
