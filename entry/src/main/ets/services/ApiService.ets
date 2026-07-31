@@ -31,6 +31,11 @@ export interface TelemetryData {
   lux: number;
   tilt: number;
   motor: number;
+  auto_mode?: number;
+  ac?: number;
+  temp_threshold_enabled?: number;
+  humi_threshold_enabled?: number;
+  illumination_threshold_enabled?: number;
   alarm: number;
   alarm_reason: string;
   scene: string;

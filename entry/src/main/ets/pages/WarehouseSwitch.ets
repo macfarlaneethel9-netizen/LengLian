@@ -33,15 +33,29 @@ import { realtimeService } from '../services/RealtimeService';
 // ================================================================
 // 命令体类型 — 字段名对齐华为云 IoTDA 设备影子
 // ================================================================
-// light = 灯    motor = 门锁   ac  = 空调   auto = 自动模式
-// tm    = 温度阈值   hu   = 湿度阈值
-// lig   = 光照阈值   lncli = 倾斜阈值
-// de    = 清除告警   all  = 紧急全关
+// led = 灯    motor = 门锁   ac = 空调   auto_mode = 自动模式
+// threshold_enable = 温度/湿度/光照阈值独立开关
+// clear_alarm = 清除告警
 // ================================================================
 
+class LedRgb {
+  r: number;
+  g: number;
+  b: number;
+
+  constructor(value: number) {
+    this.r = value;
+    this.g = value;
+    this.b = value;
+  }
+}
+
 class LightCmd {
-  light: number;
-  constructor(on: boolean) { this.light = on ? 1 : 0; }
+  led: LedRgb;
+  constructor(on: boolean) {
+    let value = on ? 255 : 0;
+    this.led = new LedRgb(value);
+  }
 }
 
 class MotorCmd {
@@ -55,33 +69,43 @@ class AcCmd {
 }
 
 class AutoCmd {
-  auto: number;
-  constructor(on: boolean) { this.auto = on ? 1 : 0; }
+  auto_mode: boolean;
+  constructor(on: boolean) { this.auto_mode = on; }
 }
 
-class TmCmd {
-  tm: number;
-  constructor(on: boolean) { this.tm = on ? 1 : 0; }
+class TemperatureThresholdValue {
+  temperature: boolean;
+  constructor(on: boolean) { this.temperature = on; }
 }
 
-class HuCmd {
-  hu: number;
-  constructor(on: boolean) { this.hu = on ? 1 : 0; }
+class HumidityThresholdValue {
+  humidity: boolean;
+  constructor(on: boolean) { this.humidity = on; }
 }
 
-class LigCmd {
-  lig: number;
-  constructor(on: boolean) { this.lig = on ? 1 : 0; }
+class IlluminationThresholdValue {
+  illumination: boolean;
+  constructor(on: boolean) { this.illumination = on; }
 }
 
-class IncliCmd {
-  lncli: number;
-  constructor(on: boolean) { this.lncli = on ? 1 : 0; }
+class TemperatureThresholdCmd {
+  threshold_enable: TemperatureThresholdValue;
+  constructor(on: boolean) { this.threshold_enable = new TemperatureThresholdValue(on); }
+}
+
+class HumidityThresholdCmd {
+  threshold_enable: HumidityThresholdValue;
+  constructor(on: boolean) { this.threshold_enable = new HumidityThresholdValue(on); }
+}
+
+class IlluminationThresholdCmd {
+  threshold_enable: IlluminationThresholdValue;
+  constructor(on: boolean) { this.threshold_enable = new IlluminationThresholdValue(on); }
 }
 
 class ClearAlarmCmd {
-  de: number;
-  constructor() { this.de = 1; }
+  clear_alarm: number;
+  constructor() { this.clear_alarm = 1; }
 }
 
 class EmergencyCmd {
@@ -112,7 +136,6 @@ export struct WarehouseSwitchPage {
   @State tmOn: boolean = true;
   @State huOn: boolean = true;
   @State ligOn: boolean = true;
-  @State incliOn: boolean = true;
 
   // ------ 反馈消息 ------
   @State okText: string = '';
@@ -125,11 +148,7 @@ export struct WarehouseSwitchPage {
     // 订阅实时推送，保持设备列表和状态最新
     realtimeService.onUpdate((devices: DeviceInfo[]) => {
       this.devices = devices;
-      // 从最新遥测同步电机状态
-      let d = this.curDevice();
-      if (d) {
-        this.doorOpen = d.last_telemetry.motor === 1;
-      }
+      this.syncCurrentTelemetry();
     });
     realtimeService.start(3000);
   }
@@ -144,16 +163,24 @@ export struct WarehouseSwitchPage {
     try {
       let result = await apiService.getDevices(1, 50);
       this.devices = result.items;
-      // 从最新遥测数据同步状态
-      if (this.devices.length > 0) {
-        let t = this.devices[0].last_telemetry;
-        this.lightOn = false;       // LED 状态不直接包含在遥测中
-        this.doorOpen = t.motor === 1;
-      }
+      this.syncCurrentTelemetry();
     } catch (err) {
       this.errorText = '加载设备失败：' + String((err as Error).message || '');
     }
     this.isLoading = false;
+  }
+
+  private syncCurrentTelemetry(): void {
+    let d = this.curDevice();
+    if (!d || !d.last_telemetry) { return; }
+    let t = d.last_telemetry;
+    this.doorOpen = t.motor === 1;
+    this.acOn = t.ac === 1;
+    this.autoOn = t.auto_mode === 1;
+    // 旧固件没有新字段时按默认开启处理
+    this.tmOn = t.temp_threshold_enabled === undefined || t.temp_threshold_enabled !== 0;
+    this.huOn = t.humi_threshold_enabled === undefined || t.humi_threshold_enabled !== 0;
+    this.ligOn = t.illumination_threshold_enabled === undefined || t.illumination_threshold_enabled !== 0;
   }
 
   // ------ 安全取当前设备（避免 ?. 渲染问题）------
@@ -272,7 +299,12 @@ export struct WarehouseSwitchPage {
             Column() {
               Row() {
                 Text('←').fontSize(28).fontColor(this.selectedIndex > 0 ? '#1a73e8' : '#CCC')
-                  .onClick(() => { if (this.selectedIndex > 0) { this.selectedIndex--; } })
+                  .onClick(() => {
+                    if (this.selectedIndex > 0) {
+                      this.selectedIndex--;
+                      this.syncCurrentTelemetry();
+                    }
+                  })
                 Column() {
                   Text('正在管理: ' + this.curName())
                     .fontSize(15).fontWeight(FontWeight.Bold).fontColor('#333')
@@ -285,7 +317,12 @@ export struct WarehouseSwitchPage {
                 }
                 .layoutWeight(1).alignItems(HorizontalAlign.Center)
                 Text('→').fontSize(28).fontColor(this.selectedIndex < this.devices.length - 1 ? '#1a73e8' : '#CCC')
-                  .onClick(() => { if (this.selectedIndex < this.devices.length - 1) { this.selectedIndex++; } })
+                  .onClick(() => {
+                    if (this.selectedIndex < this.devices.length - 1) {
+                      this.selectedIndex++;
+                      this.syncCurrentTelemetry();
+                    }
+                  })
               }.width('100%')
 
               // 当前设备实时数值
@@ -497,12 +534,12 @@ export struct WarehouseSwitchPage {
                 Text('🌡️').fontSize(18)
                 Column() {
                   Text('温度告警').fontSize(14).fontWeight(FontWeight.Medium).fontColor('#333')
-                  Text(this.tmOn ? '-2℃ ~ 8℃' : '-20℃ ~ 60℃').fontSize(11).fontColor('#999')
+                  Text(this.tmOn ? '当前阈值：2℃ ~ 8℃' : '温度阈值判断已关闭').fontSize(11).fontColor('#999')
                 }
                 .layoutWeight(1).alignItems(HorizontalAlign.Start).margin({ left: 6 })
                 Toggle({ type: ToggleType.Switch, isOn: this.tmOn })
                   .selectedColor('#F44336')
-                  .onChange((isOn: boolean) => { this.tmOn = isOn; this.sendCommand(new TmCmd(isOn), isOn ? '温度告警已开启' : '温度告警已关闭'); })
+                  .onChange((isOn: boolean) => { this.tmOn = isOn; this.sendCommand(new TemperatureThresholdCmd(isOn), isOn ? '温度阈值已开启' : '温度阈值已关闭'); })
               }.width('100%')
 
               // 💧 湿度告警
@@ -517,12 +554,12 @@ export struct WarehouseSwitchPage {
                 Text('💧').fontSize(18)
                 Column() {
                   Text('湿度告警').fontSize(14).fontWeight(FontWeight.Medium).fontColor('#333')
-                  Text(this.huOn ? '20% ~ 80%' : '0% ~ 100%').fontSize(11).fontColor('#999')
+                  Text(this.huOn ? '当前阈值：≤80%' : '湿度阈值判断已关闭').fontSize(11).fontColor('#999')
                 }
                 .layoutWeight(1).alignItems(HorizontalAlign.Start).margin({ left: 6 })
                 Toggle({ type: ToggleType.Switch, isOn: this.huOn })
                   .selectedColor('#2196F3')
-                  .onChange((isOn: boolean) => { this.huOn = isOn; this.sendCommand(new HuCmd(isOn), isOn ? '湿度告警已开启' : '湿度告警已关闭'); })
+                  .onChange((isOn: boolean) => { this.huOn = isOn; this.sendCommand(new HumidityThresholdCmd(isOn), isOn ? '湿度阈值已开启' : '湿度阈值已关闭'); })
               }.width('100%')
 
               // 💡 光照告警
@@ -537,32 +574,23 @@ export struct WarehouseSwitchPage {
                 Text('💡').fontSize(18)
                 Column() {
                   Text('光照告警').fontSize(14).fontWeight(FontWeight.Medium).fontColor('#333')
-                  Text(this.ligOn ? '0 ~ 200 lx' : '0 ~ 5000 lx').fontSize(11).fontColor('#999')
+                  Text(this.ligOn ? '当前阈值：≤200 lx' : '光照阈值判断已关闭').fontSize(11).fontColor('#999')
                 }
                 .layoutWeight(1).alignItems(HorizontalAlign.Start).margin({ left: 6 })
                 Toggle({ type: ToggleType.Switch, isOn: this.ligOn })
                   .selectedColor('#FF9800')
-                  .onChange((isOn: boolean) => { this.ligOn = isOn; this.sendCommand(new LigCmd(isOn), isOn ? '光照告警已开启' : '光照告警已关闭'); })
+                  .onChange((isOn: boolean) => { this.ligOn = isOn; this.sendCommand(new IlluminationThresholdCmd(isOn), isOn ? '光照阈值已开启' : '光照阈值已关闭'); })
               }.width('100%')
 
-              // 📐 倾斜告警
+              // 📐 倾斜保护目前由固件始终启用，APP 不显示无效开关
               Row() {
-                Text(this.incliOn ? ' ON ' : 'OFF')
-                  .fontSize(11).fontWeight(FontWeight.Bold)
-                  .fontColor(this.incliOn ? '#FFFFFF' : '#999')
-                  .backgroundColor(this.incliOn ? '#607D8B' : '#E0E0E0')
-                  .borderRadius(4)
-                  .padding({ left: 4, right: 4, top: 2, bottom: 2 })
-                  .margin({ right: 10 })
-                Text('📐').fontSize(18)
+                Text('📐').fontSize(18).margin({ right: 10 })
                 Column() {
-                  Text('倾斜告警').fontSize(14).fontWeight(FontWeight.Medium).fontColor('#333')
-                  Text(this.incliOn ? '0 ~ 15000' : '0 ~ 30000').fontSize(11).fontColor('#999')
+                  Text('倾斜保护').fontSize(14).fontWeight(FontWeight.Medium).fontColor('#333')
+                  Text('固件保护始终有效').fontSize(11).fontColor('#999')
                 }
-                .layoutWeight(1).alignItems(HorizontalAlign.Start).margin({ left: 6 })
-                Toggle({ type: ToggleType.Switch, isOn: this.incliOn })
-                  .selectedColor('#607D8B')
-                  .onChange((isOn: boolean) => { this.incliOn = isOn; this.sendCommand(new IncliCmd(isOn), isOn ? '倾斜告警已开启' : '倾斜告警已关闭'); })
+                .layoutWeight(1).alignItems(HorizontalAlign.Start)
+                Text('已启用').fontSize(12).fontColor('#607D8B')
               }.width('100%')
             }
             .width('100%').padding(20)

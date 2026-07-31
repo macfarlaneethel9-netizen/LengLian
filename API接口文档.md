@@ -376,6 +376,13 @@ Content-Type: application/json
   "led": {"r": 255, "g": 255, "b": 255},
   "motor": 80,
   "beep": 1,
+  "ac": 1,
+  "auto_mode": true,
+  "threshold_enable": {
+    "temperature": false,
+    "humidity": true,
+    "illumination": true
+  },
   "clear_alarm": 1
 }
 ```
@@ -387,6 +394,11 @@ Content-Type: application/json
 | `led.b` | int | 0-255 | 蓝色分量 |
 | `motor` | int | 0-100 | 电机 duty，>0 触发脉冲开锁，0 触发关锁 |
 | `beep` | int | 0/1 | 蜂鸣器，1=响 |
+| `ac` | int | 0/1 | 空调/除湿动作，1=开启一次，0=关闭 |
+| `auto_mode` | bool | true/false | 自动模式开关 |
+| `threshold_enable.temperature` | bool | true/false | 温度阈值判断开关；关闭会清除当前温度报警 |
+| `threshold_enable.humidity` | bool | true/false | 湿度阈值判断开关；关闭会清除当前湿度报警 |
+| `threshold_enable.illumination` | bool | true/false | 光照阈值判断开关；关闭会清除当前光照报警 |
 | `clear_alarm` | int | 0/1 | 清除告警，1=清除 |
 
 **响应 `200`**：
@@ -514,6 +526,10 @@ GET /api/health
   "lux": 618.33,           // 光照 lux
   "tilt": 2178.27,         // 倾斜量（加速度幅值）
   "motor": 0,              // 电机状态 0=关 1=开
+  "auto_mode": 0,           // 自动模式 0=关 1=开
+  "temp_threshold_enabled": 1,
+  "humi_threshold_enabled": 1,
+  "illumination_threshold_enabled": 1,
   "alarm": 1,              // 告警状态 0=正常 1=告警
   "alarm_reason": "temp_high",  // 告警原因
   "scene": "cold_chain",   // 场景标识
