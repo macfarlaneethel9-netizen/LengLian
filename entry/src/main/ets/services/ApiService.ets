@@ -219,7 +219,7 @@ class ApiService {
         readTimeout: 10000
       });
       let elapsed = Date.now() - startMs;
-      let bodyStr = resp.result as string;
+      let bodyStr = (resp.result as string) || '';
       let preview = bodyStr.length > 200 ? bodyStr.substring(0, 200) + '...' : bodyStr;
 
       console.info(

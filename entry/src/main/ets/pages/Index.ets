@@ -47,6 +47,7 @@ import { WarehouseStatusPage } from './WarehouseStatus';
 import { AlarmLogPage } from './AlarmLog';
 import { WarehouseSwitchPage } from './WarehouseSwitch';
 import { apiService } from '../services/ApiService';
+import { promptAction } from '@kit.ArkUI';
 
 // 初始化跨页面共享数据
 AppStorage.setOrCreate('tempThresholdHigh', 8);
@@ -78,6 +79,11 @@ struct Index {
   @State currentPage: string = 'Dashboard';        // 当前显示的功能页
   @State currentLabel: string = '仪表盘';            // 顶部标题
 
+  // ====== 告警轮询 ======
+  private lastAlarmId: number = 0;
+  private alarmPollTimer: number = -1;
+  @State alarmCount: number = 0;
+
   // ====== 登录后的侧边栏菜单 ======
   private menusAfterLogin: SideMenu[] = [
     new SideMenu('Dashboard',       '仪表盘',   '📊'),
@@ -90,6 +96,63 @@ struct Index {
 
   aboutToAppear(): void {
     console.info('[Index] 首页启动, 登录状态:', this.isLoggedIn);
+    if (this.isLoggedIn) {
+      this.startAlarmPoll();
+    }
+  }
+
+  aboutToDisappear(): void {
+    this.stopAlarmPoll();
+  }
+
+  // ====== 告警轮询 ======
+  startAlarmPoll(): void {
+    this.stopAlarmPoll();
+    this.alarmPollTimer = setInterval(() => {
+      this.checkNewAlarms();
+    }, 5000);
+    console.info('[Index] 告警轮询已启动(5s)');
+  }
+
+  stopAlarmPoll(): void {
+    if (this.alarmPollTimer >= 0) {
+      clearInterval(this.alarmPollTimer);
+      this.alarmPollTimer = -1;
+    }
+  }
+
+  async checkNewAlarms(): Promise<void> {
+    try {
+      let result = await apiService.getEvents(10, undefined, 'alarm');
+      if (result.events.length === 0) {
+        return;
+      }
+      let latest = result.events[0];
+      if (latest.id > this.lastAlarmId) {
+        this.alarmCount += (latest.id - this.lastAlarmId);
+        let reason = '';
+        if (latest.detail && typeof latest.detail === 'object') {
+          reason = (latest.detail as Record<string, string>)['reason'] || '';
+        }
+        promptAction.showDialog({
+          title: '⚠️ 告警',
+          message: `设备 ${latest.device_id}\n原因: ${reason || latest.kind}\n时间: ${new Date(latest.ts * 1000).toLocaleString()}`,
+          buttons: [
+            { text: '查看详情', color: '#1a73e8' },
+            { text: '忽略', color: '#999' }
+          ]
+        }).then((result) => {
+          if (result.index === 0) {
+            this.currentPage = 'AlarmLog';
+            this.currentLabel = '事件日志';
+            this.alarmCount = 0;
+          }
+        });
+        this.lastAlarmId = latest.id;
+      }
+    } catch (err) {
+      // 静默失败
+    }
   }
 
   // ====== 登录成功回调（传给 LoginPage）======
@@ -97,6 +160,9 @@ struct Index {
     this.isLoggedIn = true;
     this.currentPage = 'Dashboard';
     this.currentLabel = '仪表盘';
+    this.lastAlarmId = 0;
+    this.alarmCount = 0;
+    this.startAlarmPoll();
     console.info('[Index] 登录成功，进入主界面');
   };
 
@@ -104,7 +170,10 @@ struct Index {
   onMenuClick(menu: SideMenu): void {
     this.currentPage = menu.pageId;
     this.currentLabel = menu.label;
-    this.showSidebar = false;    // 选完自动关闭侧边栏
+    this.showSidebar = false;
+    if (menu.pageId === 'AlarmLog') {
+      this.alarmCount = 0;
+    }
     console.info('[Index] 切换页面:', menu.pageId);
   }
 
@@ -141,6 +210,21 @@ struct Index {
               .margin({ left: 8 })
 
             Blank()
+
+            if (this.alarmCount > 0) {
+              Text(`🔔 ${this.alarmCount}`)
+                .fontSize(12)
+                .fontColor('#F44336')
+                .backgroundColor('#FFEBEE')
+                .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+                .borderRadius(10)
+                .margin({ right: 8 })
+                .onClick(() => {
+                  this.currentPage = 'AlarmLog';
+                  this.currentLabel = '事件日志';
+                  this.alarmCount = 0;
+                })
+            }
 
             Text('🟢 在线')
               .fontSize(12)
@@ -226,6 +310,15 @@ struct Index {
               Text(menu.label)
                 .fontSize(14)
                 .margin({ left: 10 })
+              if (menu.pageId === 'AlarmLog' && this.alarmCount > 0) {
+                Text(`${this.alarmCount}`)
+                  .fontSize(10)
+                  .fontColor('#FFFFFF')
+                  .backgroundColor('#F44336')
+                  .padding({ left: 5, right: 5, top: 1, bottom: 1 })
+                  .borderRadius(8)
+                  .margin({ left: 6 })
+              }
             }
             .width('100%')
             .height(46)
@@ -258,6 +351,8 @@ struct Index {
       .onClick(() => {
         this.isLoggedIn = false;
         this.showSidebar = false;
+        this.stopAlarmPoll();
+        this.alarmCount = 0;
         console.info('[Index] 用户退出登录');
       })
     }
