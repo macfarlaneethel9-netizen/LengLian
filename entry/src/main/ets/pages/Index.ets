@@ -76,12 +76,13 @@ struct Index {
   @State currentLabel: string = '仪表盘';            // 顶部标题
 
   // ====== 告警轮询 ======
-  @State aiOffsetX: number = 0;
-  @State aiOffsetY: number = 0;
+  @State aiPositionX: number = 284;
+  @State aiPositionY: number = 698;
   private aiDragStartX: number = 0;
   private aiDragStartY: number = 0;
   private aiWindowWidth: number = 360;
   private aiWindowHeight: number = 780;
+  private aiPositionInitialized: boolean = false;
   private aiDragMoved: boolean = false;
 
   private lastAlarmId: number = 0;
@@ -100,11 +101,14 @@ struct Index {
   ];
 
   aboutToAppear(): void {
-    this.updateAiWindowSize();
     console.info('[Index] 首页启动, 登录状态:', this.isLoggedIn);
     if (this.isLoggedIn) {
       this.startAlarmPoll();
     }
+  }
+
+  onPageShow(): void {
+    this.updateAiWindowSize();
   }
 
   async updateAiWindowSize(): Promise<void> {
@@ -113,21 +117,25 @@ struct Index {
       let rect = currentWindow.getWindowProperties().windowRect;
       this.aiWindowWidth = rect.width;
       this.aiWindowHeight = rect.height;
-      this.aiOffsetX = this.clampAiOffsetX(this.aiOffsetX);
-      this.aiOffsetY = this.clampAiOffsetY(this.aiOffsetY);
+      if (!this.aiPositionInitialized) {
+        this.aiPositionX = this.aiWindowWidth - 76;
+        this.aiPositionY = this.aiWindowHeight - 82;
+        this.aiPositionInitialized = true;
+      } else {
+        this.aiPositionX = this.clampAiPositionX(this.aiPositionX);
+        this.aiPositionY = this.clampAiPositionY(this.aiPositionY);
+      }
     } catch (err) {
       console.warn('[Index] AI floating button uses fallback window size');
     }
   }
 
-  clampAiOffsetX(value: number): number {
-    let min = -(this.aiWindowWidth - 76);
-    return Math.max(min, Math.min(0, value));
+  clampAiPositionX(value: number): number {
+    return Math.max(0, Math.min(this.aiWindowWidth - 58, value));
   }
 
-  clampAiOffsetY(value: number): number {
-    let min = -(this.aiWindowHeight - 82);
-    return Math.max(min, Math.min(0, value));
+  clampAiPositionY(value: number): number {
+    return Math.max(0, Math.min(this.aiWindowHeight - 58, value));
   }
 
   aboutToDisappear(): void {
@@ -321,26 +329,24 @@ struct Index {
             .backgroundColor('#1A73E8')
             .borderRadius(29)
             .shadow({ radius: 10, color: '#1A73E855', offsetY: 4 })
-            .align(Alignment.BottomEnd)
-            .margin({ right: 18, bottom: 24 })
-            .offset({ x: this.aiOffsetX, y: this.aiOffsetY })
+            .position({ x: this.aiPositionX, y: this.aiPositionY })
             .gesture(
               PanGesture()
                 .onActionStart(() => {
-                  this.aiDragStartX = this.aiOffsetX;
-                  this.aiDragStartY = this.aiOffsetY;
+                  this.aiDragStartX = this.aiPositionX;
+                  this.aiDragStartY = this.aiPositionY;
                   this.aiDragMoved = false;
                 })
                 .onActionUpdate((event: GestureEvent) => {
                   if (Math.abs(event.offsetX) > 4 || Math.abs(event.offsetY) > 4) {
                     this.aiDragMoved = true;
                   }
-                  this.aiOffsetX = this.clampAiOffsetX(this.aiDragStartX + event.offsetX);
-                  this.aiOffsetY = this.clampAiOffsetY(this.aiDragStartY + event.offsetY);
+                  this.aiPositionX = this.clampAiPositionX(this.aiDragStartX + event.offsetX);
+                  this.aiPositionY = this.clampAiPositionY(this.aiDragStartY + event.offsetY);
                 })
                 .onActionEnd(() => {
-                  this.aiOffsetX = this.clampAiOffsetX(this.aiOffsetX);
-                  this.aiOffsetY = this.clampAiOffsetY(this.aiOffsetY);
+                  this.aiPositionX = this.clampAiPositionX(this.aiPositionX);
+                  this.aiPositionY = this.clampAiPositionY(this.aiPositionY);
                 })
             )
             .onClick(() => {
