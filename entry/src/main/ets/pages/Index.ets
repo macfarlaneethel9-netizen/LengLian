@@ -49,6 +49,7 @@ import { WarehouseSwitchPage } from './WarehouseSwitch';
 import { AiPage } from './AiPage';
 import { apiService } from '../services/ApiService';
 import { promptAction } from '@kit.ArkUI';
+import window from '@ohos.window';
 
 // 初始化跨页面共享数据（阈值已改为开关，无需 AppStorage）
 
@@ -75,6 +76,14 @@ struct Index {
   @State currentLabel: string = '仪表盘';            // 顶部标题
 
   // ====== 告警轮询 ======
+  @State aiOffsetX: number = 0;
+  @State aiOffsetY: number = 0;
+  private aiDragStartX: number = 0;
+  private aiDragStartY: number = 0;
+  private aiWindowWidth: number = 360;
+  private aiWindowHeight: number = 780;
+  private aiDragMoved: boolean = false;
+
   private lastAlarmId: number = 0;
   private alarmPollTimer: number = -1;
   @State alarmCount: number = 0;
@@ -91,10 +100,34 @@ struct Index {
   ];
 
   aboutToAppear(): void {
+    this.updateAiWindowSize();
     console.info('[Index] 首页启动, 登录状态:', this.isLoggedIn);
     if (this.isLoggedIn) {
       this.startAlarmPoll();
     }
+  }
+
+  async updateAiWindowSize(): Promise<void> {
+    try {
+      let currentWindow = await window.getLastWindow(getContext(this));
+      let rect = currentWindow.getWindowProperties().windowRect;
+      this.aiWindowWidth = rect.width;
+      this.aiWindowHeight = rect.height;
+      this.aiOffsetX = this.clampAiOffsetX(this.aiOffsetX);
+      this.aiOffsetY = this.clampAiOffsetY(this.aiOffsetY);
+    } catch (err) {
+      console.warn('[Index] AI floating button uses fallback window size');
+    }
+  }
+
+  clampAiOffsetX(value: number): number {
+    let min = -(this.aiWindowWidth - 76);
+    return Math.max(min, Math.min(0, value));
+  }
+
+  clampAiOffsetY(value: number): number {
+    let min = -(this.aiWindowHeight - 82);
+    return Math.max(min, Math.min(0, value));
   }
 
   aboutToDisappear(): void {
@@ -290,7 +323,31 @@ struct Index {
             .shadow({ radius: 10, color: '#1A73E855', offsetY: 4 })
             .align(Alignment.BottomEnd)
             .margin({ right: 18, bottom: 24 })
+            .offset({ x: this.aiOffsetX, y: this.aiOffsetY })
+            .gesture(
+              PanGesture()
+                .onActionStart(() => {
+                  this.aiDragStartX = this.aiOffsetX;
+                  this.aiDragStartY = this.aiOffsetY;
+                  this.aiDragMoved = false;
+                })
+                .onActionUpdate((event: GestureEvent) => {
+                  if (Math.abs(event.offsetX) > 4 || Math.abs(event.offsetY) > 4) {
+                    this.aiDragMoved = true;
+                  }
+                  this.aiOffsetX = this.clampAiOffsetX(this.aiDragStartX + event.offsetX);
+                  this.aiOffsetY = this.clampAiOffsetY(this.aiDragStartY + event.offsetY);
+                })
+                .onActionEnd(() => {
+                  this.aiOffsetX = this.clampAiOffsetX(this.aiOffsetX);
+                  this.aiOffsetY = this.clampAiOffsetY(this.aiOffsetY);
+                })
+            )
             .onClick(() => {
+              if (this.aiDragMoved) {
+                this.aiDragMoved = false;
+                return;
+              }
               this.currentPage = 'AI';
               this.currentLabel = 'AI 助手';
               this.showSidebar = false;
