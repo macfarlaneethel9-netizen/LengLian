@@ -2,7 +2,10 @@
  * 设备列表页面
  *
  * 拉取 GET /api/devices，展示所有冷链设备的概览卡片。
- * 支持添加设备（POST /api/devices），直接关联华为云。
+ * 支持：
+ *   - 设备排序（🔀 按钮进入排序模式，▲▼ 上下移动）
+ *   - 添加设备（POST /api/devices），直接关联华为云
+ *   - 手动刷新 + 自动轮询（每 3 秒）
  */
 
 import { PageTitle } from '../components/CommonBuilders';

@@ -1,29 +1,41 @@
 /**
- * 仓库开关管理 — 硬件控制面板
+ * 仓库开关管理 — 硬件控制面板（多设备切换）
  *
  * ============================================================
  * 命令下发链路（点击按钮 → 硬件响应）：
  * ============================================================
  *
- *   App 按钮点击
+ *   App Toggle / 按钮点击
  *     → sendCommand()
- *     → POST /api/devices/{id}/cmd     (后端 REST API)
- *     → 后端转发到华为云 IoT              (AMQP / MQTT)
- *     → 华为云下发到 RK2206 通晓开发板    (MQTT)
+ *     → POST /api/devices/{id}/cmd       (后端 REST API)
+ *     → 后端转发到华为云 IoTDA             (AMQP / MQTT)
+ *     → 华为云下发到 RK2206 通晓开发板     (MQTT)
  *     → 开发板 GPIO 驱动
- *     → 电机转动 / LED 亮灭
+ *     → LED 亮灭 / 电机转动 / 空调启停
  *
  * ============================================================
- * 控制功能：
+ * 控制功能（字段名对齐华为云 IoTDA 设备影子）：
  * ============================================================
- *   灯光（💡 LED）     — 对应硬件 LED 灯，可开关
- *   大门（🚪 电机）    — 对应硬件电机驱动，脉冲式开/关锁
- *   空调（❄️ 制冷）    — 冷链仓库制冷设备开关
- *   设定温度           — 冷链系统目标温度
- *   温度阈值           — 温度告警上下限
- *   湿度阈值           — 湿度告警上下限
- *   光照阈值           — 光照告警上限
- *   倾斜阈值           — 倾斜告警上限
+ *   灯光（💡 LED）    — {"led": {"r":255,"g":255,"b":255}}
+ *   大门（🚪 电机）   — {"motor": 80|0}         (80=开锁脉冲)
+ *   空调（❄️ 制冷）   — {"ac": 1|0}
+ *   自动模式（🤖）    — {"auto_mode": true|false}
+ *   温度告警开关      — {"threshold_enable": {"temperature": bool}}
+ *   湿度告警开关      — {"threshold_enable": {"humidity": bool}}
+ *   光照告警开关      — {"threshold_enable": {"illumination": bool}}
+ *   清除告警（🔕）    — {"clear_alarm": 1}
+ *   紧急全关（🚨）    — {"all": 1}
+ *
+ * ============================================================
+ * 双向同步机制：
+ * ============================================================
+ *   下发：App → 后端 → IoTDA → 硬件
+ *   反向：硬件遥测 → 后端 → RealtimeService → syncCurrentTelemetry()
+ *         → 开关状态自动与硬件真实状态保持一致
+ *
+ * ============================================================
+ * 设备选择：← → 切换设备，选中设备的名称/ID/位置/实时数值
+ *   在上方信息栏展示，所有控制操作针对选中设备下发
  */
 
 import { PageTitle } from '../components/CommonBuilders';
@@ -33,9 +45,10 @@ import { realtimeService } from '../services/RealtimeService';
 // ================================================================
 // 命令体类型 — 字段名对齐华为云 IoTDA 设备影子
 // ================================================================
-// led = 灯    motor = 门锁   ac = 空调   auto_mode = 自动模式
-// threshold_enable = 温度/湿度/光照阈值独立开关
-// clear_alarm = 清除告警
+// led: {r,g,b} = 灯光 RGB 值    motor = 门锁脉冲(80/0)
+// ac  = 空调开关   auto_mode = 自动模式
+// threshold_enable = 嵌套 {"temperature"/"humidity"/"illumination": bool}
+// clear_alarm = 清除告警(触发)   all = 紧急全关(触发)
 // ================================================================
 
 class LedRgb {
@@ -145,10 +158,12 @@ export struct WarehouseSwitchPage {
   aboutToAppear(): void {
     this.fetchDevices();
 
-    // 订阅实时推送，保持设备列表和状态最新
+    // 订阅实时推送，仅更新设备列表（不覆盖用户正在操作的开关状态）
     realtimeService.onUpdate((devices: DeviceInfo[]) => {
       this.devices = devices;
-      this.syncCurrentTelemetry();
+      // 注意：不在这里 syncCurrentTelemetry()
+      // 因为命令下发后硬件需要时间响应，轮询到的遥测可能还是旧值
+      // 会把用户刚拨动的 Toggle 覆盖回去
     });
     realtimeService.start(3000);
   }
@@ -386,6 +401,7 @@ export struct WarehouseSwitchPage {
                 Toggle({ type: ToggleType.Switch, isOn: this.lightOn })
                   .selectedColor('#FF9800')
                   .onChange((isOn: boolean) => {
+                    if (this.lightOn === isOn) { return; }
                     this.lightOn = isOn;
                     this.sendCommand(new LightCmd(isOn), isOn ? '开灯' : '关灯');
                   })
@@ -471,6 +487,7 @@ export struct WarehouseSwitchPage {
                 Toggle({ type: ToggleType.Switch, isOn: this.acOn })
                   .selectedColor('#2196F3')
                   .onChange((isOn: boolean) => {
+                    if (this.acOn === isOn) { return; }
                     this.acOn = isOn;
                     this.sendCommand(new AcCmd(isOn), isOn ? '开空调' : '关空调');
                   })
@@ -504,6 +521,7 @@ export struct WarehouseSwitchPage {
                 Toggle({ type: ToggleType.Switch, isOn: this.autoOn })
                   .selectedColor('#9C27B0')
                   .onChange((isOn: boolean) => {
+                    if (this.autoOn === isOn) { return; }
                     this.autoOn = isOn;
                     this.sendCommand(new AutoCmd(isOn), isOn ? '开启自动模式' : '关闭自动模式');
                   })
@@ -539,7 +557,7 @@ export struct WarehouseSwitchPage {
                 .layoutWeight(1).alignItems(HorizontalAlign.Start).margin({ left: 6 })
                 Toggle({ type: ToggleType.Switch, isOn: this.tmOn })
                   .selectedColor('#F44336')
-                  .onChange((isOn: boolean) => { this.tmOn = isOn; this.sendCommand(new TemperatureThresholdCmd(isOn), isOn ? '温度阈值已开启' : '温度阈值已关闭'); })
+                  .onChange((isOn: boolean) => { if (this.tmOn === isOn) { return; } this.tmOn = isOn; this.sendCommand(new TemperatureThresholdCmd(isOn), isOn ? '温度阈值已开启' : '温度阈值已关闭'); })
               }.width('100%')
 
               // 💧 湿度告警
@@ -559,7 +577,7 @@ export struct WarehouseSwitchPage {
                 .layoutWeight(1).alignItems(HorizontalAlign.Start).margin({ left: 6 })
                 Toggle({ type: ToggleType.Switch, isOn: this.huOn })
                   .selectedColor('#2196F3')
-                  .onChange((isOn: boolean) => { this.huOn = isOn; this.sendCommand(new HumidityThresholdCmd(isOn), isOn ? '湿度阈值已开启' : '湿度阈值已关闭'); })
+                  .onChange((isOn: boolean) => { if (this.huOn === isOn) { return; } this.huOn = isOn; this.sendCommand(new HumidityThresholdCmd(isOn), isOn ? '湿度阈值已开启' : '湿度阈值已关闭'); })
               }.width('100%')
 
               // 💡 光照告警
@@ -579,7 +597,7 @@ export struct WarehouseSwitchPage {
                 .layoutWeight(1).alignItems(HorizontalAlign.Start).margin({ left: 6 })
                 Toggle({ type: ToggleType.Switch, isOn: this.ligOn })
                   .selectedColor('#FF9800')
-                  .onChange((isOn: boolean) => { this.ligOn = isOn; this.sendCommand(new IlluminationThresholdCmd(isOn), isOn ? '光照阈值已开启' : '光照阈值已关闭'); })
+                  .onChange((isOn: boolean) => { if (this.ligOn === isOn) { return; } this.ligOn = isOn; this.sendCommand(new IlluminationThresholdCmd(isOn), isOn ? '光照阈值已开启' : '光照阈值已关闭'); })
               }.width('100%')
 
               // 📐 倾斜保护目前由固件始终启用，APP 不显示无效开关

@@ -1,8 +1,10 @@
 /**
- * 告警记录页面
+ * 事件日志页面
  *
- * 拉取 GET /api/events?kind=alarm，展示所有告警事件。
- * 设备告警来源：上游物联网平台实时推送。
+ * 拉取 GET /api/events，按类型筛选展示事件。
+ * 支持类型：告警(alarm) / 命令下发(cmd) / 开锁(lock) /
+ *           上线(online) / 离线(offline)
+ * 事件来源：后端从华为云 IoTDA 接收并存储。
  */
 
 import { PageTitle } from '../components/CommonBuilders';

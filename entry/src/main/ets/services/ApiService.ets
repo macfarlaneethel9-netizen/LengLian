@@ -1,8 +1,23 @@
 /**
- * API 服务层
+ * API 服务层（全局单例）
  *
  * 封装对冷链监控后端的所有 HTTP 请求。
  * Base URL: http://123.60.36.30/api
+ *
+ * 功能模块：
+ *   - 认证：login / register → JWT Token
+ *   - 设备：getDevices / getDevice / createDevice
+ *   - 遥测：getTelemetry（历史数据）
+ *   - 控制：sendCommand（转发 IoTDA 命令到硬件）
+ *   - 事件：getEvents（告警/命令/上下线日志）
+ *   - AI：  chatAi（后端代理 Mimo，密钥不存 APP）
+ *   - 诊断：healthCheck
+ *
+ * 设计要点：
+ *   - Bearer Token 自动附加
+ *   - 连接/读取双重超时 10s
+ *   - HTTP 错误解析后端 detail 字段
+ *   - 每个请求完整日志（method/path/耗时/preview）
  */
 
 import { http } from '@kit.NetworkKit';
