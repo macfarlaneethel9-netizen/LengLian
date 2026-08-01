@@ -1,38 +1,42 @@
 /**
  * AI 助手入口页
  *
- * 当前提供 APP 内的 AI 对话入口和基础交互，后续可在 sendMessage()
- * 中接入实际的 AI 服务接口。
+ * 通过服务器 /api/ai/chat 代理访问 Mimo AI，密钥不保存在 APP。
  */
 
-class AiMessage {
-  text: string;
-  fromUser: boolean;
-
-  constructor(text: string, fromUser: boolean) {
-    this.text = text;
-    this.fromUser = fromUser;
-  }
-}
+import { apiService, AiMessage } from '../services/ApiService';
 
 @Component
 export struct AiPage {
   onBack?: () => void;
   @State inputText: string = '';
   @State messages: AiMessage[] = [
-    new AiMessage('你好，我是冷链 AI 助手。你可以询问设备状态、告警和环境数据。', false)
+    new AiMessage('assistant', '你好，我是冷链 AI 助手。你可以询问设备状态、告警和环境数据。')
   ];
 
-  sendMessage(): void {
+  @State isSending: boolean = false;
+
+  async sendMessage(): Promise<void> {
     let text = this.inputText.trim();
-    if (text.length === 0) {
+    if (text.length === 0 || this.isSending) {
       return;
     }
-    this.messages = this.messages.concat([new AiMessage(text, true)]);
+    this.messages = this.messages.concat([new AiMessage('user', text)]);
     this.inputText = '';
-    this.messages = this.messages.concat([
-      new AiMessage('AI 服务接口尚未配置，当前先保留对话入口。', false)
-    ]);
+    this.isSending = true;
+    try {
+      let result = await apiService.chatAi(this.messages);
+      if (result.message && result.message.content) {
+        this.messages = this.messages.concat([
+          new AiMessage('assistant', result.message.content)
+        ]);
+      }
+    } catch (err) {
+      this.messages = this.messages.concat([
+        new AiMessage('assistant', 'AI 请求失败：' + String((err as Error).message || '请稍后重试'))
+      ]);
+    }
+    this.isSending = false;
   }
 
   build() {
@@ -64,29 +68,29 @@ export struct AiPage {
         ForEach(this.messages, (message: AiMessage) => {
           ListItem() {
             Row() {
-              if (!message.fromUser) {
+              if (message.role !== 'user') {
                 Text('🤖')
                   .fontSize(22)
                   .margin({ right: 8 })
               }
-              Text(message.text)
+              Text(message.content)
                 .fontSize(15)
-                .fontColor(message.fromUser ? '#FFFFFF' : '#333333')
+                .fontColor(message.role === 'user' ? '#FFFFFF' : '#333333')
                 .lineHeight(22)
                 .padding(12)
-                .backgroundColor(message.fromUser ? '#1A73E8' : '#FFFFFF')
+                .backgroundColor(message.role === 'user' ? '#1A73E8' : '#FFFFFF')
                 .borderRadius(14)
                 .layoutWeight(1)
-              if (message.fromUser) {
+              if (message.role === 'user') {
                 Text('👤')
                   .fontSize(22)
                   .margin({ left: 8 })
               }
             }
             .width('100%')
-            .justifyContent(message.fromUser ? FlexAlign.End : FlexAlign.Start)
+            .justifyContent(message.role === 'user' ? FlexAlign.End : FlexAlign.Start)
           }
-        }, (message: AiMessage) => message.text)
+        }, (message: AiMessage) => message.content)
       }
       .layoutWeight(1)
       .width('100%')
@@ -104,7 +108,7 @@ export struct AiPage {
           .onChange((value: string) => {
             this.inputText = value;
           })
-        Button('发送')
+        Button(this.isSending ? '…' : '发送')
           .height(44)
           .width(72)
           .fontColor('#FFFFFF')

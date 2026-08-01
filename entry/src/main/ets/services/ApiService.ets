@@ -24,6 +24,30 @@ export interface LoginResult {
   user: UserInfo;
 }
 
+export class AiMessage {
+  role: string;
+  content: string;
+
+  constructor(role: string, content: string) {
+    this.role = role;
+    this.content = content;
+  }
+}
+
+class AiChatBody {
+  messages: AiMessage[];
+
+  constructor(messages: AiMessage[]) {
+    this.messages = messages;
+  }
+}
+
+export interface AiChatResult {
+  ok: boolean;
+  model: string;
+  message: AiMessage;
+}
+
 export interface TelemetryData {
   ts: number;
   temp: number;
@@ -372,6 +396,19 @@ class ApiService {
       cmd
     );
     return JSON.parse(data);
+  }
+
+  // ----------------------------------------------------------
+  // AI 对话（由服务器代理调用 Mimo，密钥不放在 APP）
+  // ----------------------------------------------------------
+
+  async chatAi(messages: AiMessage[]): Promise<AiChatResult> {
+    let data = await this.request(
+      http.RequestMethod.POST,
+      '/ai/chat',
+      new AiChatBody(messages)
+    );
+    return JSON.parse(data) as AiChatResult;
   }
 
   // ----------------------------------------------------------
