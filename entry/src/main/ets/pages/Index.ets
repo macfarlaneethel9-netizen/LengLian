@@ -46,6 +46,7 @@ import { DeviceListPage } from './DeviceList';
 import { WarehouseStatusPage } from './WarehouseStatus';
 import { AlarmLogPage } from './AlarmLog';
 import { WarehouseSwitchPage } from './WarehouseSwitch';
+import { AiPage } from './AiPage';
 import { apiService } from '../services/ApiService';
 import { promptAction } from '@kit.ArkUI';
 
@@ -85,6 +86,7 @@ struct Index {
     new SideMenu('WarehouseStatus',  '仓库状态', '🏭'),
     new SideMenu('AlarmLog',         '事件日志', '🔔'),
     new SideMenu('WarehouseSwitch',  '仓库开关', '⚡'),
+    new SideMenu('AI',               'AI 助手',   '🤖'),
     new SideMenu('UserInfo',         '系统管理', '👤'),
   ];
 
@@ -245,6 +247,13 @@ struct Index {
             AlarmLogPage()
           } else if (this.currentPage === 'WarehouseSwitch') {
             WarehouseSwitchPage()
+          } else if (this.currentPage === 'AI') {
+            AiPage({
+              onBack: () => {
+                this.currentPage = 'Dashboard';
+                this.currentLabel = '仪表盘';
+              }
+            })
           }
         }
         .width('100%')
@@ -268,6 +277,24 @@ struct Index {
           }
           .width('100%')
           .height('100%')
+        }
+
+        // 右下角悬浮 AI 入口；打开侧边栏或已在 AI 页时隐藏。
+        if (!this.showSidebar && this.currentPage !== 'AI') {
+          Button('🤖')
+            .width(58)
+            .height(58)
+            .fontSize(28)
+            .backgroundColor('#1A73E8')
+            .borderRadius(29)
+            .shadow({ radius: 10, color: '#1A73E855', offsetY: 4 })
+            .align(Alignment.BottomEnd)
+            .margin({ right: 18, bottom: 24 })
+            .onClick(() => {
+              this.currentPage = 'AI';
+              this.currentLabel = 'AI 助手';
+              this.showSidebar = false;
+            })
         }
       }
       .width('100%')
