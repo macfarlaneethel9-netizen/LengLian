@@ -50,6 +50,7 @@ import { AiPage } from './AiPage';
 import { apiService } from '../services/ApiService';
 import { promptAction } from '@kit.ArkUI';
 import window from '@ohos.window';
+import display from '@ohos.display';
 
 // 初始化跨页面共享数据（阈值已改为开关，无需 AppStorage）
 
@@ -115,8 +116,10 @@ struct Index {
     try {
       let currentWindow = await window.getLastWindow(getContext(this));
       let rect = currentWindow.getWindowProperties().windowRect;
-      this.aiWindowWidth = rect.width;
-      this.aiWindowHeight = rect.height;
+      let density = Math.max(1, display.getDefaultDisplaySync().densityPixels);
+      // windowRect uses physical pixels while position() uses vp.
+      this.aiWindowWidth = rect.width / density;
+      this.aiWindowHeight = rect.height / density;
       if (!this.aiPositionInitialized) {
         this.aiPositionX = this.aiWindowWidth - 76;
         this.aiPositionY = this.aiWindowHeight - 82;
